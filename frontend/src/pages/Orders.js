@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api';
 import toast from 'react-hot-toast';
 import { ShoppingBag, RefreshCw, ChevronRight, Package, Truck, CheckCircle2, XCircle, Clock, Search } from 'lucide-react';
 
@@ -34,7 +34,7 @@ function OrderCard({ order, onUpdate }) {
     if (!next) return;
     setUpdating(true);
     try {
-      const {data} = await axios.put(`/api/orders/${order.orderId}/status`, { status:next });
+      const {data} = await api.put(`/api/orders/${order.orderId}/status`, { status:next });
       if (data.success) { toast.success(`Order ${next==='delivered'?'delivered! Thank you message sent 🎉':'updated!'}`); onUpdate(); }
     } catch { toast.error('Update failed'); }
     setUpdating(false);
@@ -93,7 +93,7 @@ export default function Orders() {
       const params = {};
       if (filter !== 'all') params.status = filter;
       if (date) params.date = date;
-      const {data} = await axios.get('/api/orders', { params });
+      const {data} = await api.get('/api/orders', { params });
       if (data.success) setOrders(data.orders);
     } catch { toast.error('Failed to load orders'); }
     setLoading(false);

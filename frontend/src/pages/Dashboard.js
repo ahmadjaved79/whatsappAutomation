@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import api from '../api';
 import toast from 'react-hot-toast';
 import { ShoppingBag, TrendingUp, Clock, IndianRupee, Wifi, WifiOff, Loader2, RefreshCw, QrCode, Power } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -34,7 +34,7 @@ export default function Dashboard() {
   // Poll status every 3 seconds as SSE fallback
   const pollStatus = useCallback(async () => {
     try {
-      const { data } = await axios.get('/api/whatsapp/status');
+      const { data } = await api.get('/api/whatsapp/status');
       setWpp(prev => ({
         status: data.status,
         qr: data.status === 'CONNECTED' ? null : (data.qr || prev.qr)
@@ -53,7 +53,7 @@ export default function Dashboard() {
     // SSE as bonus
     let es;
     try {
-      es = new EventSource('/api/whatsapp/status/stream');
+      es = new EventSource((process.env.REACT_APP_API_URL || 'http://localhost:5000') + '/api/whatsapp/status/stream');
       es.onmessage = (e) => {
         try {
           const d = JSON.parse(e.data);
@@ -76,8 +76,8 @@ export default function Dashboard() {
     setLoading(true);
     try {
       const [s, o] = await Promise.all([
-        axios.get('/api/orders/stats/summary'),
-        axios.get('/api/orders'),
+        api.get('/api/orders/stats/summary'),
+        api.get('/api/orders'),
       ]);
       if (s.data.success) setStats(s.data.stats);
       if (o.data.success) setOrders(o.data.orders.slice(0, 10)); // fetch recent 10
@@ -88,7 +88,7 @@ export default function Dashboard() {
   const connectWpp = async () => {
     setConnecting(true);
     try {
-      await axios.post('/api/whatsapp/connect');
+      await api.post('/api/whatsapp/connect');
       toast.success('Initialising… QR will appear shortly');
     } catch {
       toast.error('Connection failed');
@@ -98,7 +98,7 @@ export default function Dashboard() {
 
   const disconnectWpp = async () => {
     try {
-      await axios.post('/api/whatsapp/disconnect');
+      await api.post('/api/whatsapp/disconnect');
       setWpp({ status: 'DISCONNECTED', qr: null });
       toast.success('Disconnected');
     } catch { toast.error('Failed'); }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import api from '../api';
 import toast from 'react-hot-toast';
 import { Upload, UserPlus, Trash2, FileSpreadsheet, Phone, CheckCircle2, Save, X, Users } from 'lucide-react';
 
@@ -30,7 +30,7 @@ export default function Contacts() {
   useEffect(() => { loadContacts(); }, []);
 
   const loadContacts = async () => {
-    try { const {data} = await axios.get('/api/contacts'); if(data.success) setContacts(data.contacts); }
+    try { const {data} = await api.get('/api/contacts'); if(data.success) setContacts(data.contacts); }
     catch { toast.error('Failed to load contacts'); }
   };
 
@@ -40,7 +40,7 @@ export default function Contacts() {
     setUploading(true);
     const fd = new FormData(); fd.append('file', file);
     try {
-      const { data } = await axios.post('/api/contacts/upload-excel', fd);
+      const { data } = await api.post('/api/contacts/upload-excel', fd);
       if (data.success) { 
         setExtracted(data.contacts); 
         toast.success(`Extracted ${data.count} contacts!`); 
@@ -73,7 +73,7 @@ export default function Contacts() {
     if (!all.length) { toast.error('No contacts to save'); return; }
     setSaving(true);
     try {
-      const { data } = await axios.post('/api/contacts/save', { contacts: all, source: extracted.length > 0 ? 'excel' : 'manual' });
+      const { data } = await api.post('/api/contacts/save', { contacts: all, source: extracted.length > 0 ? 'excel' : 'manual' });
       if (data.success) { 
         toast.success(`Saved ${data.added} contacts!`); 
         setExtracted([]); 
@@ -86,7 +86,7 @@ export default function Contacts() {
 
   const deleteContact = async (id) => {
     if (!window.confirm('Delete this contact?')) return;
-    try { await axios.delete(`/api/contacts/${id}`); toast.success('Deleted'); loadContacts(); }
+    try { await api.delete(`/api/contacts/${id}`); toast.success('Deleted'); loadContacts(); }
     catch { toast.error('Delete failed'); }
   };
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api';
 import toast from 'react-hot-toast';
 import { Plus, Pencil, Trash2, UtensilsCrossed, IndianRupee, Tag, ToggleLeft, ToggleRight, RefreshCw, Zap } from 'lucide-react';
 
@@ -55,17 +55,17 @@ export default function Menu() {
   useEffect(() => { loadMenu(); }, []);
 
   const loadMenu = async () => {
-    try { const {data} = await axios.get('/api/menu'); if(data.success) setItems(data.items); } catch { toast.error('Failed to load menu'); }
+    try { const {data} = await api.get('/api/menu'); if(data.success) setItems(data.items); } catch { toast.error('Failed to load menu'); }
   };
 
   const save = async () => {
     if (!form.name.trim()||!form.price) { toast.error('Name and price are required'); return; }
     try {
       if (editing) {
-        await axios.put(`/api/menu/${editing}`, {...form,price:Number(form.price)});
+        await api.put(`/api/menu/${editing}`, {...form,price:Number(form.price)});
         toast.success('Updated!');
       } else {
-        await axios.post('/api/menu', {...form,price:Number(form.price)});
+        await api.post('/api/menu', {...form,price:Number(form.price)});
         toast.success('Added!');
       }
       setForm(EMPTY); setEditing(null); setShowForm(false); loadMenu();
@@ -76,17 +76,17 @@ export default function Menu() {
 
   const deleteItem = async (id) => {
     if (!window.confirm('Delete this item?')) return;
-    try { await axios.delete(`/api/menu/${id}`); toast.success('Deleted'); loadMenu(); } catch { toast.error('Delete failed'); }
+    try { await api.delete(`/api/menu/${id}`); toast.success('Deleted'); loadMenu(); } catch { toast.error('Delete failed'); }
   };
 
   const toggleAvail = async (item) => {
-    try { await axios.put(`/api/menu/${item._id}`, {...item,available:!item.available}); loadMenu(); } catch { toast.error('Failed'); }
+    try { await api.put(`/api/menu/${item._id}`, {...item,available:!item.available}); loadMenu(); } catch { toast.error('Failed'); }
   };
 
   const seedMenu = async () => {
     if (!window.confirm('This will reset menu to defaults. Continue?')) return;
     setSeeding(true);
-    try { const {data}=await axios.post('/api/menu/seed'); toast.success(`${data.count} items seeded!`); loadMenu(); } catch { toast.error('Seed failed'); }
+    try { const {data}=await api.post('/api/menu/seed'); toast.success(`${data.count} items seeded!`); loadMenu(); } catch { toast.error('Seed failed'); }
     setSeeding(false);
   };
 

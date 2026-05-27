@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Users, Megaphone, ShoppingBag, UtensilsCrossed, Wifi, WifiOff, Loader2, Menu, X } from 'lucide-react';
-import axios from 'axios';
+import api from '../api';
 import './Layout.css';
 
 const navItems = [
@@ -20,7 +20,7 @@ export default function Layout() {
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const { data } = await axios.get('/api/whatsapp/status');
+        const { data } = await api.get('/api/whatsapp/status');
         setWppStatus(data.status);
       } catch {}
     };
@@ -30,7 +30,7 @@ export default function Layout() {
 
     let es;
     try {
-      es = new EventSource('/api/whatsapp/status/stream');
+      es = new EventSource((process.env.REACT_APP_API_URL || 'http://localhost:5000') + '/api/whatsapp/status/stream');
       es.onmessage = (e) => {
         try {
           const d = JSON.parse(e.data);

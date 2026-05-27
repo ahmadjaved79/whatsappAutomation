@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import api from '../api';
 import toast from 'react-hot-toast';
 import { Send, Image, Users, CheckSquare, Square, FileCode, Clock, CheckCircle2, AlertCircle, X, Eye } from 'lucide-react';
 
@@ -38,11 +38,11 @@ export default function Template() {
   useEffect(() => { loadContacts(); loadTemplates(); }, []);
 
   const loadContacts = async () => {
-    try { const { data } = await axios.get('/api/contacts'); if (data.success) setContacts(data.contacts.filter(c => !c.optedOut)); } catch {}
+    try { const { data } = await api.get('/api/contacts'); if (data.success) setContacts(data.contacts.filter(c => !c.optedOut)); } catch {}
   };
   
   const loadTemplates = async () => {
-    try { const { data } = await axios.get('/api/template'); if (data.success) setTemplates(data.templates); } catch {}
+    try { const { data } = await api.get('/api/template'); if (data.success) setTemplates(data.templates); } catch {}
   };
 
   const handleImage = (file) => {
@@ -66,7 +66,7 @@ export default function Template() {
       fd.append('phones', JSON.stringify(phones));
       if (image) fd.append('image', image);
       
-      const { data } = await axios.post('/api/template/send', fd);
+      const { data } = await api.post('/api/template/send', fd);
       if (data.success) {
         toast.success(`🚀 Sending to ${data.total} contacts!`);
         setForm(f => ({ ...f, message: '', footer: '' })); setImage(null); setPreview(null);
