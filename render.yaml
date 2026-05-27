@@ -3,13 +3,11 @@ services:
     name: mutton-shop-backend
     runtime: node
     rootDir: backend
-    buildCommand: apt-get update && apt-get install -y chromium-browser && npm install
+    buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PUPPETEER_EXECUTABLE_PATH
-        value: /usr/bin/chromium-browser
       - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
         value: "true"
       - key: SESSION_NAME

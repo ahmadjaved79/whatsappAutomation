@@ -1,4 +1,5 @@
 const wppconnect = require('@wppconnect-team/wppconnect');
+const chromium = require('@sparticuz/chromium');
 const path = require('path');
 const fs = require('fs');
 
@@ -24,37 +25,60 @@ const initWhatsApp = async () => {
   try {
     broadcastStatus('INITIALIZING');
 
-    // ── Cross-platform browser detection ────────────────────────────────────
-    // Priority: env var → Windows → macOS → Linux (Chrome then Chromium fallbacks)
-    const LINUX_BROWSER_PATHS = [
-      '/usr/bin/google-chrome',
-      '/usr/bin/google-chrome-stable',
-      '/usr/bin/chromium-browser',
-      '/usr/bin/chromium',
-      '/snap/bin/chromium',
-    ];
+    // ── Cloud-safe Chromium setup ────────────────────────────────────────────
+    // process.env.RENDER is automatically injected by Render.com on every deployment.
+    // We check ONLY this — NOT NODE_ENV — so local dev with NODE_ENV=production still
+    // uses the local system Chrome and doesn't try to run @sparticuz/chromium on Windows.
+    const isCloud = !!process.env.RENDER;
 
-    let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-    let useChrome = false; // default: let wppconnect pick the bundled browser
+    let executablePath;
+    let browserArgs;
 
-    if (!executablePath) {
-      if (process.platform === 'win32') {
-        executablePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-        useChrome = true;
-      } else if (process.platform === 'darwin') {
-        executablePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-        useChrome = true;
-      } else {
-        // Linux — find whichever browser binary actually exists
-        executablePath = LINUX_BROWSER_PATHS.find(p => fs.existsSync(p)) || null;
-        useChrome = !!(executablePath && executablePath.includes('chrome'));
-      }
+    if (isCloud) {
+      // Use @sparticuz/chromium on Render / any cloud
+      executablePath = await chromium.executablePath();
+      browserArgs = [
+        ...chromium.args,
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu',
+        '--disable-extensions',
+        '--disable-software-rasterizer',
+        '--single-process', // required for Render container memory limits
+      ];
+      console.log(`🌐 Using @sparticuz/chromium (cloud mode) | path=${executablePath}`);
     } else {
-      // Env var was set — trust it
-      useChrome = executablePath.toLowerCase().includes('chrome');
+      // Local development — auto-detect system browser
+      const LOCAL_PATHS = [
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',          // Windows
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',    // Windows x86
+        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',        // macOS
+        '/usr/bin/google-chrome-stable',                                        // Linux
+        '/usr/bin/google-chrome',
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium',
+        '/snap/bin/chromium',
+      ];
+      executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+        || LOCAL_PATHS.find(p => fs.existsSync(p))
+        || null;
+      browserArgs = [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu',
+        '--disable-extensions',
+        '--disable-software-rasterizer',
+      ];
+      console.log(`🌐 Using local browser: ${executablePath || 'puppeteer default'} | cloud=false`);
     }
-
-    console.log(`🌐 Using browser: ${executablePath || 'bundled (puppeteer default)'} | useChrome=${useChrome}`);
 
     client = await wppconnect.create({
       session: process.env.SESSION_NAME || 'mutton-shop',
@@ -79,7 +103,7 @@ const initWhatsApp = async () => {
 
       headless: true,
       devtools: false,
-      useChrome,
+      useChrome: false, // always false — we supply executablePath manually
       debug: false,
       logQR: false,
       disableWelcome: true,
@@ -89,18 +113,8 @@ const initWhatsApp = async () => {
       folderNameToken: path.join(__dirname, '../tokens'),
 
       puppeteerOptions: {
-        ...(executablePath ? { executablePath } : {}), // omit if null — use bundled Chromium
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu',
-          '--disable-extensions',
-          '--disable-software-rasterizer',
-        ],
+        executablePath,
+        args: browserArgs,
       },
     });
 
@@ -132,7 +146,6 @@ const initWhatsApp = async () => {
         });
       } catch {}
 
-      // ── FIX: Strip @c.us / @lid suffix and normalise to pure digits ────────
       const stripSuffix = (val) => {
         if (!val) return '';
         return String(val).split('@')[0].replace(/\D/g, '');
@@ -182,7 +195,7 @@ const isSelfSend = (target, hostUser) => {
   );
 };
 
-// Helper for retrying message sends with built-in error handling
+// ── Retry helper ─────────────────────────────────────────────────────────────
 const sendWithRetry = async (fn, target, retries = 2, delay = 2000) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
@@ -235,7 +248,7 @@ const sendImageMessage = async (phone, imagePath, caption = '') => {
   }, target);
 };
 
-// ── Send buttons (up to 3) ───────────────────────────────────────────────────
+// ── Send buttons ─────────────────────────────────────────────────────────────
 const sendButtons = async (phone, text, buttons, title = '', footer = '') => {
   if (!client) throw new Error('WhatsApp not connected');
   const target = formatPhone(phone);
@@ -262,7 +275,7 @@ const sendButtons = async (phone, text, buttons, title = '', footer = '') => {
   }, target);
 };
 
-// ── Send Poll Message ────────────────────────────────────────────────────────
+// ── Send Poll ────────────────────────────────────────────────────────────────
 const sendPoll = async (phone, name, choices) => {
   if (!client) throw new Error('WhatsApp not connected');
   const target = formatPhone(phone);
@@ -280,7 +293,7 @@ const sendPoll = async (phone, name, choices) => {
   }, target);
 };
 
-// ── Send list/menu message ───────────────────────────────────────────────────
+// ── Send list/menu ───────────────────────────────────────────────────────────
 const sendListMenu = async (phone, options) => {
   if (!client) throw new Error('WhatsApp not connected');
   const chatId = formatPhone(phone);
