@@ -1,5 +1,6 @@
 const wppconnect = require('@wppconnect-team/wppconnect');
 const path = require('path');
+const fs = require('fs');
 
 let client = null;
 let clientStatus = 'DISCONNECTED';
@@ -23,12 +24,37 @@ const initWhatsApp = async () => {
   try {
     broadcastStatus('INITIALIZING');
 
-    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH ||
-      (process.platform === 'win32'
-        ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
-        : process.platform === 'darwin'
-        ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-        : '/usr/bin/google-chrome');
+    // ── Cross-platform browser detection ────────────────────────────────────
+    // Priority: env var → Windows → macOS → Linux (Chrome then Chromium fallbacks)
+    const LINUX_BROWSER_PATHS = [
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/chromium',
+      '/snap/bin/chromium',
+    ];
+
+    let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    let useChrome = false; // default: let wppconnect pick the bundled browser
+
+    if (!executablePath) {
+      if (process.platform === 'win32') {
+        executablePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+        useChrome = true;
+      } else if (process.platform === 'darwin') {
+        executablePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+        useChrome = true;
+      } else {
+        // Linux — find whichever browser binary actually exists
+        executablePath = LINUX_BROWSER_PATHS.find(p => fs.existsSync(p)) || null;
+        useChrome = !!(executablePath && executablePath.includes('chrome'));
+      }
+    } else {
+      // Env var was set — trust it
+      useChrome = executablePath.toLowerCase().includes('chrome');
+    }
+
+    console.log(`🌐 Using browser: ${executablePath || 'bundled (puppeteer default)'} | useChrome=${useChrome}`);
 
     client = await wppconnect.create({
       session: process.env.SESSION_NAME || 'mutton-shop',
@@ -53,7 +79,7 @@ const initWhatsApp = async () => {
 
       headless: true,
       devtools: false,
-      useChrome: true,
+      useChrome,
       debug: false,
       logQR: false,
       disableWelcome: true,
@@ -63,7 +89,7 @@ const initWhatsApp = async () => {
       folderNameToken: path.join(__dirname, '../tokens'),
 
       puppeteerOptions: {
-        executablePath,
+        ...(executablePath ? { executablePath } : {}), // omit if null — use bundled Chromium
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -107,8 +133,6 @@ const initWhatsApp = async () => {
       } catch {}
 
       // ── FIX: Strip @c.us / @lid suffix and normalise to pure digits ────────
-      // getMeUser() can return '91XXXXXXXXXX@c.us', '91XXXXXXXXXX@lid', or just '91XXXXXXXXXX'
-      // We must strip the suffix BEFORE storing hostUser so exact-match logic works correctly.
       const stripSuffix = (val) => {
         if (!val) return '';
         return String(val).split('@')[0].replace(/\D/g, '');
@@ -146,20 +170,15 @@ const formatPhone = (phone) => {
   return c + '@c.us';
 };
 
-// ── BUG FIX: Exact self-send check (replaces unsafe startsWith) ──────────────
-// OLD CODE used target.startsWith(client.hostUser) which caused FALSE POSITIVES:
-//   e.g. if hostUser was '86392717' (truncated) it would block ANY number whose
-//   formatted string BEGAN with those digits — including real customers.
-// NEW CODE: normalises both sides to pure digits then checks exact equality,
-//   also accounting for the 91-prefix variant.
+// ── Exact self-send check ────────────────────────────────────────────────────
 const isSelfSend = (target, hostUser) => {
   if (!hostUser) return false;
-  const targetNum = target.split('@')[0].replace(/\D/g, ''); // e.g. '918639271799'
-  const host      = String(hostUser).replace(/\D/g, '');     // e.g. '918639271799' or '8639271799'
+  const targetNum = target.split('@')[0].replace(/\D/g, '');
+  const host      = String(hostUser).replace(/\D/g, '');
   return (
-    targetNum === host ||                   // exact match with same prefix style
-    targetNum === '91' + host ||            // target has 91, host doesn't
-    '91' + targetNum === host               // host has 91, target doesn't (unlikely but safe)
+    targetNum === host ||
+    targetNum === '91' + host ||
+    '91' + targetNum === host
   );
 };
 
@@ -185,7 +204,6 @@ const sendTextMessage = async (phone, text) => {
   if (!client) throw new Error('WhatsApp not connected');
   const target = formatPhone(phone);
 
-  // ── FIX: use exact isSelfSend() instead of startsWith ───────────────────
   if (isSelfSend(target, client.hostUser)) {
     console.log(`⚠️ [WA-Service] Self-send detected for ${target} (hostUser=${client.hostUser}). Skipping.`);
     return { success: true, selfSend: true };
