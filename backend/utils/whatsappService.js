@@ -91,14 +91,19 @@ const initWhatsApp = async () => {
 
       statusFind: (statusSession) => {
         console.log('WPP Status:', statusSession);
-        if (statusSession === 'inChat' || statusSession === 'isLogged') {
+        // inChat / isLogged = fully ready to send messages
+        // chatsAvailable = fired after sync completes — safest signal for bulk send
+        if (['inChat', 'isLogged', 'chatsAvailable'].includes(statusSession)) {
           broadcastStatus('CONNECTED');
           qrCodeData = null;
         } else if (statusSession === 'browserClose' || statusSession === 'serverClose') {
           broadcastStatus('DISCONNECTED');
           client = null;
+        } else if (statusSession === 'disconnectedMobile') {
+          broadcastStatus('DISCONNECTED');
+          client = null;
         }
-        // notLogged = waiting for QR scan — do NOT disconnect here
+        // notLogged / qrReadSuccess / SYNCING = transitional — do NOT disconnect
       },
 
       headless: true,
