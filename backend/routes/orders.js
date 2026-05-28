@@ -59,6 +59,17 @@ router.put('/:id/status', async (req, res) => {
 
   if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
 
+  // Reduce stock if order is delivered (completed)
+  if (status === 'delivered') {
+    const Menu = require('../models/Menu');
+    for (const item of order.items) {
+      if (item.menuItem) {
+        await Menu.findByIdAndUpdate(item.menuItem, { $inc: { stockQty: -item.quantity } })
+          .catch((err) => console.error(`Failed to reduce stock on order completion:`, err.message));
+      }
+    }
+  }
+
   // Send WhatsApp notification
   const client = getClient();
   if (client) {
@@ -80,6 +91,42 @@ router.put('/:id/status', async (req, res) => {
   }
 
   res.json({ success: true, order });
+});
+
+// Delete order + restore stock + send WhatsApp notification to customer
+router.delete('/:id', async (req, res) => {
+  const order = await Order.findOne({ orderId: req.params.id });
+  if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+
+  // Block deletion of completed (delivered) orders
+  if (order.status === 'delivered') {
+    return res.status(400).json({ success: false, message: 'Cannot cancel or delete a completed order' });
+  }
+
+
+
+  // 2. Send WhatsApp notification
+  const client = getClient();
+  if (client) {
+    try {
+      const { sendTextMessage, formatPhone } = require('../utils/whatsappService');
+      const cancelMsg = `❌ *ORDER CANCELLED*
+──────────────────────
+🆔 Order ID: *${order.orderId}*
+──────────────────────
+😔 Your order has been cancelled and deleted by the store admin.
+
+If you have any questions, please contact us. 🙏`;
+      await sendTextMessage(formatPhone(order.customerPhone), cancelMsg);
+    } catch (e) {
+      console.error('Failed to send cancellation message:', e.message);
+    }
+  }
+
+  // 3. Delete order from database
+  await Order.deleteOne({ orderId: req.params.id });
+
+  res.json({ success: true, message: 'Order deleted successfully' });
 });
 
 module.exports = router;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 import toast from 'react-hot-toast';
-import { ShoppingBag, RefreshCw, ChevronRight, Package, Truck, CheckCircle2, XCircle, Clock, Search } from 'lucide-react';
+import { ShoppingBag, RefreshCw, ChevronRight, Package, Truck, CheckCircle2, XCircle, Clock, Search, Trash2 } from 'lucide-react';
 
 const S = {
   page: { animation:'fadeIn .35s ease' },
@@ -40,6 +40,21 @@ function OrderCard({ order, onUpdate }) {
     setUpdating(false);
   };
 
+  const deleteOrder = async () => {
+    if (!window.confirm(`Delete order ${order.orderId}? This will cancel it, restore the stock, and send a cancellation message to the customer.`)) return;
+    setUpdating(true);
+    try {
+      const { data } = await api.delete(`/api/orders/${order.orderId}`);
+      if (data.success) {
+        toast.success('Order deleted and cancelled successfully!');
+        onUpdate();
+      }
+    } catch {
+      toast.error('Failed to delete order');
+    }
+    setUpdating(false);
+  };
+
   return (
     <div style={{background:'#fff',border:'1px solid #F0F0F0',borderRadius:12,padding:'16px 18px',boxShadow:'0 1px 6px rgba(0,0,0,.05)',transition:'box-shadow .2s'}}
       onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.1)'}
@@ -65,14 +80,34 @@ function OrderCard({ order, onUpdate }) {
         </div>
       </div>
       {/* Footer */}
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-        <span style={{fontSize:11,color:'#aaa'}}>{new Date(order.createdAt).toLocaleString('en-IN')}</span>
-        {next && order.status!=='cancelled' && (
-          <button onClick={advance} disabled={updating} style={{...S.btn,background:'linear-gradient(135deg,#C8102E,#9B0D22)',color:'#fff',opacity:updating?0.7:1}}>
-            {updating?'Updating…':<><ChevronRight size={13}/>{NEXT_LABEL[order.status]}</>}
+      <div style={{display:'flex',flexDirection:'column',gap:12,marginTop:12,paddingTop:12,borderTop:'1px dashed #eee'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span style={{fontSize:11,color:'#aaa'}}>{new Date(order.createdAt).toLocaleString('en-IN')}</span>
+          {order.status==='delivered' && <span style={{fontSize:12,color:'#1A7A4A',fontWeight:600}}>✅ Completed</span>}
+        </div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+          <button 
+            onClick={deleteOrder} 
+            disabled={updating || order.status === 'delivered'} 
+            style={{
+              ...S.btn,
+              background: (updating || order.status === 'delivered') ? '#f8fafc' : '#FFF0F2',
+              color: (updating || order.status === 'delivered') ? '#cbd5e1' : '#C8102E',
+              border: (updating || order.status === 'delivered') ? '1px solid #e2e8f0' : '1px solid #F5D0D7',
+              padding:'7px 11px',
+              flex:1,
+              justifyContent:'center',
+              cursor: (updating || order.status === 'delivered') ? 'not-allowed' : 'pointer'
+            }}
+          >
+            <Trash2 size={13}/> Cancel & Delete
           </button>
-        )}
-        {order.status==='delivered' && <span style={{fontSize:12,color:'#1A7A4A',fontWeight:600}}>✅ Completed</span>}
+          {next && order.status!=='cancelled' && (
+            <button onClick={advance} disabled={updating} style={{...S.btn,background:'linear-gradient(135deg,#C8102E,#9B0D22)',color:'#fff',opacity:updating?0.7:1,flex:1,justifyContent:'center'}}>
+              {updating?'Updating…':<><ChevronRight size={13}/>{NEXT_LABEL[order.status]}</>}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

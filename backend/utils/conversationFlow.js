@@ -255,7 +255,13 @@ const handleInterestResponse = async (key, body, session) => {
 
 // ── Send menu ─────────────────────────────────────────────────────────────────
 const sendMenuItems = async (sp) => {
-  const items = await Menu.find({ available: true }).sort('category name');
+  const items = await Menu.find({
+    available: true,
+    $or: [
+      { stockQty: null },
+      { stockQty: { $gt: 0 } }
+    ]
+  }).sort('category name');
   if (!items.length) { await sendTextMessage(sp, '😔 Menu not available. Please call us!'); return; }
 
   let txt = `🍖 *TODAY'S FRESH MENU* 🍗\n──────────────────────\n\n`;
@@ -276,7 +282,13 @@ const handleItemSelection = async (key, body, session) => {
   const sp = toSendPhone(key);
   if (body === 'menu') { await sendMenuItems(sp); return; }
 
-  const items   = await Menu.find({ available: true }).sort('category name');
+  const items = await Menu.find({
+    available: true,
+    $or: [
+      { stockQty: null },
+      { stockQty: { $gt: 0 } }
+    ]
+  }).sort('category name');
   const indices = body.split(/[,\s]+/)
     .map(n => parseInt(n.trim()) - 1)
     .filter(n => !isNaN(n) && n >= 0 && n < items.length);
@@ -332,9 +344,6 @@ const confirmOrder = async (key, sp, selectedItems, templateId) => {
     return { menuItem: item._id, name: item.name, quantity, unit: item.unit, price: item.price, total: amount };
   });
 
-  for (const { item, quantity } of selectedItems) {
-    await Menu.findByIdAndUpdate(item._id, { $inc: { stockQty: -quantity } }).catch(() => {});
-  }
 
   const order = new Order({
     orderId,
