@@ -9,5 +9,7 @@ const messageCacheSchema = new mongoose.Schema({
 
 // Compound unique index on remoteJid and id for fast lookups and deduplication
 messageCacheSchema.index({ remoteJid: 1, id: 1 }, { unique: true });
+// Single field index on id for fallback lookup when JID varies (e.g. LID vs phone number JID)
+messageCacheSchema.index({ id: 1 });
 
 module.exports = mongoose.model('MessageCache', messageCacheSchema);

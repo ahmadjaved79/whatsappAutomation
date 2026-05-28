@@ -64,20 +64,44 @@ const cacheMsg = async (remoteJid, id, message) => {
   }
 };
 const getCachedMsg = async (remoteJid, id) => {
-  if (!remoteJid || !id) return null;
-  const key = `${remoteJid}::${id}`;
-  if (msgCache.has(key)) {
+  if (!id) return null;
+  const key = remoteJid ? `${remoteJid}::${id}` : null;
+  
+  // 1. Try memory with full JID
+  if (key && msgCache.has(key)) {
     return msgCache.get(key);
   }
 
+  // 2. Try memory with ID alone (scan keys ending with ::id)
+  for (const [k, val] of msgCache.entries()) {
+    if (k.endsWith(`::${id}`)) {
+      return val;
+    }
+  }
+
+  // 3. Try DB with full JID
+  if (remoteJid) {
+    try {
+      const record = await MessageCache.findOne({ remoteJid, id });
+      if (record && record.message) {
+        msgCache.set(key, record.message);
+        return record.message;
+      }
+    } catch (err) {
+      console.error('Failed to retrieve cached message from MongoDB:', err.message);
+    }
+  }
+
+  // 4. Try DB with ID alone (fallback for LID vs phone number JID mismatch)
   try {
-    const record = await MessageCache.findOne({ remoteJid, id });
+    const record = await MessageCache.findOne({ id });
     if (record && record.message) {
-      msgCache.set(key, record.message);
+      const dbKey = record.remoteJid ? `${record.remoteJid}::${id}` : `${remoteJid || 'unknown'}::${id}`;
+      msgCache.set(dbKey, record.message);
       return record.message;
     }
   } catch (err) {
-    console.error('Failed to retrieve cached message from MongoDB:', err.message);
+    console.error('Failed to retrieve cached message by ID from MongoDB:', err.message);
   }
   return null;
 };
@@ -435,8 +459,8 @@ const sendImageMessage = async (phone, imagePath, caption = '') => {
       : fs.readFileSync(imagePath);
     const res = await sock.sendMessage(jid, { image: imageSource, caption });
     // Cache sent image message immediately
-    if (res?.key?.id && res?.message) {
-      await cacheMsg(res.key.remoteJid || jid, res.key.id, res.message);
+    if (res?.key?.id) {
+      await cacheMsg(res.key.remoteJid || jid, res.key.id, res.message || { imageMessage: { caption } });
     }
     console.log(`✅ [WA] Image sent to ${jid}`);
     return res;
@@ -456,14 +480,18 @@ const sendButtons = async (phone, text, buttons, title = '', footer = '') => {
   ].filter(Boolean).join('\n\n');
   return sendWithRetry(async () => {
     const res = await sock.sendMessage(jid, { text: fullText });
-    if (res?.key?.id && res?.message) {
-      await cacheMsg(res.key.remoteJid || jid, res.key.id, res.message);
+    if (res?.key?.id) {
+      await cacheMsg(res.key.remoteJid || jid, res.key.id, res.message || { conversation: fullText });
     }
     return res;
   }, jid);
 };
 
 // ── Send Poll ─────────────────────────────────────────────────────────────────
+const pollChoicesToOptions = (choices) => {
+  return (choices || []).map(c => ({ optionName: String(c) }));
+};
+
 const sendPoll = async (phone, name, choices) => {
   if (!sock) throw new Error('WhatsApp not connected');
   const jid = formatPhone(phone);
@@ -472,8 +500,12 @@ const sendPoll = async (phone, name, choices) => {
     const res = await sock.sendMessage(jid, {
       poll: { name, values: choices, selectableCount: 1 },
     });
-    if (res?.key?.id && res?.message) {
-      await cacheMsg(res.key.remoteJid || jid, res.key.id, res.message);
+    if (res?.key?.id) {
+      await cacheMsg(
+        res.key.remoteJid || jid,
+        res.key.id,
+        res.message || { pollCreationMessage: { name, options: pollChoicesToOptions(choices), selectableCount: 1 } }
+      );
     }
     console.log(`✅ [WA] Poll sent to ${jid}`);
     return res;
@@ -494,8 +526,8 @@ const sendListMenu = async (phone, options) => {
   if (options.buttonText) text += `\n_${options.buttonText}_`;
   return sendWithRetry(async () => {
     const res = await sock.sendMessage(jid, { text: text.trim() });
-    if (res?.key?.id && res?.message) {
-      await cacheMsg(res.key.remoteJid || jid, res.key.id, res.message);
+    if (res?.key?.id) {
+      await cacheMsg(res.key.remoteJid || jid, res.key.id, res.message || { conversation: text.trim() });
     }
     return res;
   }, jid);
