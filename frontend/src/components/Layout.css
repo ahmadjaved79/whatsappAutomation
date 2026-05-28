@@ -255,6 +255,7 @@
   flex: 1;
   padding: 28px;
   overflow-y: auto;
+  overflow-x: hidden;
   background: #f1f5f9;
 }
 
@@ -300,7 +301,7 @@
   .topbar__menu-btn    { display: flex; }
 
   /* Content */
-  .main-content { padding: 14px 12px; }
+  .main-content { padding: 14px 12px; overflow-x: hidden; }
   .topbar        { padding: 0 14px; }
   .topbar__title { font-size: 15px; }
 

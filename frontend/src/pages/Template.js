@@ -143,19 +143,19 @@ export default function Template() {
         </button>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 400px', gap: 20, alignItems: 'start' }}>
+      <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) 400px', gap: 20, alignItems: 'start', width: '100%' }}>
 
         {/* ── LEFT: Compose ─────────────────────────────── */}
         <div>
           {/* Compose card */}
-          <div style={S.card}>
+          <div style={{ ...S.card, padding: isMobile ? '16px 16px' : '22px 24px' }}>
             <div style={S.title}><Send size={16} color="#c8102e" />Compose Message</div>
 
             {/* Header */}
             <div style={{ marginBottom:16 }}>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
+              <div style={{ display:'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', justifyContent:'space-between', marginBottom:6, gap: isMobile ? 6 : 0 }}>
                 <label style={{ ...S.label, margin:0 }}>Header Title</label>
-                <div style={{ display:'flex', gap:5 }}>
+                <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
                   {['Name','Phone','Email'].map(v => <VarChip key={v} field="title" ref_={titleRef} v={v} />)}
                 </div>
               </div>
@@ -166,9 +166,9 @@ export default function Template() {
 
             {/* Body */}
             <div style={{ marginBottom:16 }}>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
+              <div style={{ display:'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', justifyContent:'space-between', marginBottom:6, gap: isMobile ? 6 : 0 }}>
                 <label style={{ ...S.label, margin:0 }}>Message Body *</label>
-                <div style={{ display:'flex', gap:5 }}>
+                <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
                   {['Name','Phone','Email'].map(v => <VarChip key={v} field="message" ref_={msgRef} v={v} />)}
                 </div>
               </div>
@@ -189,7 +189,7 @@ export default function Template() {
           </div>
 
           {/* Image card */}
-          <div style={S.card}>
+          <div style={{ ...S.card, padding: isMobile ? '16px 16px' : '22px 24px' }}>
             <div style={{ ...S.title, justifyContent:'space-between' }}>
               <span style={{ display:'flex', alignItems:'center', gap:8 }}><Img size={16} color="#2563eb" />Attach Image</span>
               {image && <button onClick={() => { setImage(null); setPreview(null); }}
@@ -207,7 +207,7 @@ export default function Template() {
                 onDragLeave={() => setDragging(false)}
                 onDrop={e => { e.preventDefault(); setDragging(false); handleImage(e.dataTransfer.files[0]); }}
                 onClick={() => fileRef.current?.click()}
-                style={{ border:`2px dashed ${dragging?'#c8102e':'#cbd5e1'}`, borderRadius:12, padding:'32px 24px', textAlign:'center', cursor:'pointer', background: dragging ? '#fff5f5' : '#f8fafc' }}
+                style={{ border:`2px dashed ${dragging?'#c8102e':'#cbd5e1'}`, borderRadius:12, padding: isMobile ? '32px 12px' : '32px 24px', textAlign:'center', cursor:'pointer', background: dragging ? '#fff5f5' : '#f8fafc' }}
               >
                 <Upload size={26} color={dragging?'#c8102e':'#94a3b8'} style={{ margin:'0 auto 8px', display:'block' }} />
                 <div style={{ fontSize:13, color:'#64748b' }}>Drag & drop or <span style={{ color:'#c8102e', textDecoration:'underline' }}>click to upload</span></div>
@@ -218,7 +218,7 @@ export default function Template() {
           </div>
 
           {/* Recipients card */}
-          <div style={S.card}>
+          <div style={{ ...S.card, padding: isMobile ? '16px 16px' : '22px 24px' }}>
             <div style={{ ...S.title, justifyContent:'space-between' }}>
               <span style={{ display:'flex', alignItems:'center', gap:8 }}><Users size={16} color="#16a34a" />Recipients</span>
               <span style={{ background:'#fef2f2', color:'#c8102e', fontSize:11.5, fontWeight:700, padding:'3px 10px', borderRadius:20 }}>{recipientCount} selected</span>
@@ -306,7 +306,7 @@ export default function Template() {
         <div>
 
           {/* WA Preview */}
-          <div style={S.card}>
+          <div style={{ ...S.card, padding: isMobile ? '16px 16px' : '22px 24px' }}>
             <div style={S.title}><Eye size={16} color="#16a34a" />Live Preview</div>
             <div style={{ borderRadius:14, overflow:'hidden', border:'1px solid #e2e8f0', boxShadow:'0 4px 16px rgba(0,0,0,.06)' }}>
               {/* WA header */}
@@ -323,11 +323,11 @@ export default function Template() {
                   <img src={preview} alt="" style={{ width:'100%', maxHeight:140, objectFit:'cover', display:'block' }} />
                 </div>}
                 <div style={{ background:'#fff', borderRadius:'0 12px 12px 12px', padding:'12px 14px', maxWidth:'90%', boxShadow:'0 1px 3px rgba(0,0,0,.1)' }}>
-                  {form.title && <div style={{ fontSize:13, fontWeight:700, color:'#1e293b', marginBottom:5 }}>{PREVIEW_REPLACE(form.title)}</div>}
-                  <div style={{ fontSize:12.5, color:'#334155', lineHeight:1.55, whiteSpace:'pre-wrap' }}>
+                  {form.title && <div style={{ fontSize:13, fontWeight:700, color:'#1e293b', marginBottom:5, wordBreak: 'break-word', overflowWrap: 'break-word' }}>{PREVIEW_REPLACE(form.title)}</div>}
+                  <div style={{ fontSize:12.5, color:'#334155', lineHeight:1.55, whiteSpace:'pre-wrap', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                     {form.message ? PREVIEW_REPLACE(form.message) : <span style={{ color:'#94a3b8', fontStyle:'italic' }}>Your message will appear here…</span>}
                   </div>
-                  {form.footer && <div style={{ fontSize:11.5, color:'#64748b', fontStyle:'italic', marginTop:6, borderTop:'1px solid #f1f5f9', paddingTop:6 }}>{PREVIEW_REPLACE(form.footer)}</div>}
+                  {form.footer && <div style={{ fontSize:11.5, color:'#64748b', fontStyle:'italic', marginTop:6, borderTop:'1px solid #f1f5f9', paddingTop:6, wordBreak: 'break-word', overflowWrap: 'break-word' }}>{PREVIEW_REPLACE(form.footer)}</div>}
                   <div style={{ fontSize:12, color:'#1e293b', background:'#f8fafc', borderRadius:8, padding:'8px 10px', marginTop:8, lineHeight:1.7, borderLeft:'3px solid #25d366' }}>
                     🛒 <strong>Are you interested?</strong><br />
                     1️⃣ Yes, Interested!<br />
@@ -342,7 +342,7 @@ export default function Template() {
           </div>
 
           {/* Campaign History */}
-          <div style={S.card}>
+          <div style={{ ...S.card, padding: isMobile ? '16px 16px' : '22px 24px' }}>
             <div style={{ ...S.title, justifyContent:'space-between' }}>
               <span style={{ display:'flex', alignItems:'center', gap:8 }}><Clock size={16} color="#d97706" />Campaign History</span>
               <span style={{ background:'#f1f5f9', color:'#475569', fontSize:11.5, fontWeight:700, padding:'3px 10px', borderRadius:20 }}>{templates.length}</span>
@@ -371,12 +371,12 @@ export default function Template() {
                               {st}
                             </span>
                           </div>
-                          <div style={{ display:'flex', gap:12, marginTop:5, fontSize:11, color:'#666' }}>
+                          <div style={{ display:'flex', gap: isMobile ? 6 : 12, flexWrap: 'wrap', marginTop:5, fontSize:11, color:'#666', alignItems: 'center' }}>
                             <span>📤 {t.totalSent||0}</span>
                             <span>✅ {t.interested||0}</span>
                             <span>❌ {t.notInterested||0}</span>
                             <span>🛒 {t.ordersGenerated||0}</span>
-                            <span style={{ marginLeft:'auto', color:'#aaa' }}>
+                            <span style={{ marginLeft: isMobile ? '0' : 'auto', color:'#aaa' }}>
                               {t.sentAt ? new Date(t.sentAt).toLocaleDateString('en-IN') : ''}
                             </span>
                           </div>
@@ -390,7 +390,7 @@ export default function Template() {
                                 {l:'Not Int.',  v:t.notInterested||0,   bg:'#fef2f2',c:'#dc2626'},
                                 {l:'Orders',    v:t.ordersGenerated||0, bg:'#fef3c7',c:'#d97706'},
                               ].map(s=>(
-                                <div key={s.l} style={{flex:1,minWidth:55,background:s.bg,color:s.c,borderRadius:8,padding:'8px 4px',textAlign:'center'}}>
+                                <div key={s.l} style={{flex:1,minWidth: isMobile ? 48 : 55,background:s.bg,color:s.c,borderRadius:8,padding:'8px 4px',textAlign:'center'}}>
                                   <div style={{fontSize:18,fontWeight:800}}>{s.v}</div>
                                   <div style={{fontSize:10,opacity:.8}}>{s.l}</div>
                                 </div>
