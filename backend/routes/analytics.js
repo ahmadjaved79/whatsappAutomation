@@ -4,20 +4,21 @@ const Order   = require('../models/Order');
 const Contact = require('../models/Contact');
 
 // GET /api/analytics/revenue?period=daily|weekly|monthly
+// Revenue = ONLY delivered orders
 router.get('/revenue', async (req, res) => {
   const period = req.query.period || 'daily';
   let groupId, daysBack;
 
-  if (period === 'monthly')      { groupId = { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } };  daysBack = 365; }
-  else if (period === 'weekly')  { groupId = { year: { $year: '$createdAt' }, week: { $week: '$createdAt' } };    daysBack = 90;  }
-  else                           { groupId = { year: { $year: '$createdAt' }, month: { $month: '$createdAt' }, day: { $dayOfMonth: '$createdAt' } }; daysBack = 30; }
+  if (period === 'monthly')     { groupId = { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } };  daysBack = 365; }
+  else if (period === 'weekly') { groupId = { year: { $year: '$createdAt' }, week: { $week: '$createdAt' } };    daysBack = 90;  }
+  else                          { groupId = { year: { $year: '$createdAt' }, month: { $month: '$createdAt' }, day: { $dayOfMonth: '$createdAt' } }; daysBack = 30; }
 
   const since = new Date();
   since.setDate(since.getDate() - daysBack);
 
   const data = await Order.aggregate([
-    { $match: { createdAt: { $gte: since } } },
-    { $group: { _id: groupId, revenue: { $sum: '$totalAmount' }, orders: { $sum: 1 }, delivered: { $sum: { $cond: [{ $eq: ['$status','delivered'] }, 1, 0] } } } },
+    { $match: { createdAt: { $gte: since }, status: 'delivered' } }, // ← delivered only
+    { $group: { _id: groupId, revenue: { $sum: '$totalAmount' }, orders: { $sum: 1 } } },
     { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1, '_id.week': 1 } },
   ]);
 
@@ -27,6 +28,7 @@ router.get('/revenue', async (req, res) => {
 // GET /api/analytics/top-items
 router.get('/top-items', async (req, res) => {
   const data = await Order.aggregate([
+    { $match: { status: 'delivered' } },
     { $unwind: '$items' },
     { $group: { _id: '$items.name', qty: { $sum: '$items.quantity' }, revenue: { $sum: '$items.total' }, orders: { $sum: 1 } } },
     { $sort: { revenue: -1 } },
@@ -36,6 +38,7 @@ router.get('/top-items', async (req, res) => {
 });
 
 // GET /api/analytics/summary
+// Revenue counts ONLY delivered orders
 router.get('/summary', async (req, res) => {
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
   const weekStart  = new Date(); weekStart.setDate(weekStart.getDate() - 7);
@@ -50,10 +53,11 @@ router.get('/summary', async (req, res) => {
     Order.countDocuments({ createdAt: { $gte: todayStart } }),
     Order.countDocuments({ createdAt: { $gte: weekStart } }),
     Order.countDocuments({ createdAt: { $gte: monthStart } }),
-    Order.aggregate([{ $group: { _id: null, t: { $sum: '$totalAmount' } } }]),
-    Order.aggregate([{ $match: { createdAt: { $gte: todayStart } } }, { $group: { _id: null, t: { $sum: '$totalAmount' } } }]),
-    Order.aggregate([{ $match: { createdAt: { $gte: weekStart  } } }, { $group: { _id: null, t: { $sum: '$totalAmount' } } }]),
-    Order.aggregate([{ $match: { createdAt: { $gte: monthStart } } }, { $group: { _id: null, t: { $sum: '$totalAmount' } } }]),
+    // Revenue = delivered only
+    Order.aggregate([{ $match: { status: 'delivered' } }, { $group: { _id: null, t: { $sum: '$totalAmount' } } }]),
+    Order.aggregate([{ $match: { status: 'delivered', createdAt: { $gte: todayStart } } }, { $group: { _id: null, t: { $sum: '$totalAmount' } } }]),
+    Order.aggregate([{ $match: { status: 'delivered', createdAt: { $gte: weekStart  } } }, { $group: { _id: null, t: { $sum: '$totalAmount' } } }]),
+    Order.aggregate([{ $match: { status: 'delivered', createdAt: { $gte: monthStart } } }, { $group: { _id: null, t: { $sum: '$totalAmount' } } }]),
     Contact.countDocuments({ optedOut: false }),
     Contact.countDocuments({ segment: 'vip' }),
     Contact.countDocuments({ segment: 'regular' }),

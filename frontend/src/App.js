@@ -13,28 +13,29 @@ import ScheduleBroadcast from './pages/ScheduleBroadcast';
 import ManualMessage from './pages/ManualMessage';
 import StockManager from './pages/StockManager';
 import './App.css';
+import './responsive.css';   // ← global responsive styles for all pages
 
 export default function App() {
   return (
     <BrowserRouter>
       <Toaster position="top-right" toastOptions={{
-        style: { fontFamily: 'DM Sans, sans-serif', fontSize: '14px', borderRadius: '10px' },
-        success: { iconTheme: { primary: '#1A7A4A', secondary: '#fff' } },
-        error: { iconTheme: { primary: '#C8102E', secondary: '#fff' } },
+        style: { fontFamily:'DM Sans, sans-serif', fontSize:'14px', borderRadius:'10px' },
+        success: { iconTheme:{ primary:'#1A7A4A', secondary:'#fff' } },
+        error:   { iconTheme:{ primary:'#C8102E', secondary:'#fff' } },
       }} />
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard"        element={<Dashboard />} />
-          <Route path="contacts"         element={<Contacts />} />
-          <Route path="template"         element={<Template />} />
-          <Route path="orders"           element={<Orders />} />
-          <Route path="menu"             element={<Menu />} />
-          <Route path="revenue"          element={<RevenueReports />} />
-          <Route path="customers"        element={<CustomerProfiles />} />
-          <Route path="schedule"         element={<ScheduleBroadcast />} />
-          <Route path="manual-message"   element={<ManualMessage />} />
-          <Route path="stock"            element={<StockManager />} />
+          <Route path="dashboard"       element={<Dashboard />} />
+          <Route path="contacts"        element={<Contacts />} />
+          <Route path="template"        element={<Template />} />
+          <Route path="orders"          element={<Orders />} />
+          <Route path="menu"            element={<Menu />} />
+          <Route path="revenue"         element={<RevenueReports />} />
+          <Route path="customers"       element={<CustomerProfiles />} />
+          <Route path="schedule"        element={<ScheduleBroadcast />} />
+          <Route path="manual-message"  element={<ManualMessage />} />
+          <Route path="stock"           element={<StockManager />} />
         </Route>
       </Routes>
     </BrowserRouter>

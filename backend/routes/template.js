@@ -24,7 +24,6 @@ const sendDelay = (base = 4000) => {
   return sleep(Math.max(2500, base + jitter));
 };
 
-// Wait until WhatsApp is CONNECTED before bulk send
 const waitForConnected = async (maxWait = 90000) => {
   const interval = 2000;
   let elapsed = 0;
@@ -40,7 +39,7 @@ const waitForConnected = async (maxWait = 90000) => {
   return false;
 };
 
-// Shared broadcast runner (used by immediate + scheduler)
+// ── Shared broadcast runner ───────────────────────────────────────────────────
 const runBroadcast = async (template, phoneList, imageUrl) => {
   let client = getClient();
   if (!client) {
@@ -67,7 +66,13 @@ const runBroadcast = async (template, phoneList, imageUrl) => {
     }
 
     try {
-      await ConversationFlow.startTemplate(phone, imageUrl, template.message, template.title, template.footer, client);
+      // ── Pass template._id so conversationFlow can track interested/orders ──
+      await ConversationFlow.startTemplate(
+        phone, imageUrl,
+        template.message, template.title, template.footer,
+        client,
+        template._id   // ← templateId for stats tracking
+      );
       await Contact.findOneAndUpdate({ phone }, { $inc: { templatesSent: 1 }, lastStatus: 'sent' }, { upsert: true });
       sent++;
       console.log(`✅ [${i + 1}/${phoneList.length}] Sent to ${phone}`);
@@ -86,7 +91,7 @@ const runBroadcast = async (template, phoneList, imageUrl) => {
   console.log(`🏁 Done: ${sent} sent, ${failed} failed`);
 };
 
-// POST /api/template/send — send immediately
+// POST /api/template/send
 router.post('/send', upload.single('image'), async (req, res) => {
   const { title, message, footer, phones } = req.body;
   let phoneList = [];
@@ -108,10 +113,10 @@ router.post('/send', upload.single('image'), async (req, res) => {
   await template.save();
 
   res.json({ success: true, templateId: template._id, total: phoneList.length, message: 'Template started!' });
-  runBroadcast(template, phoneList, imageUrl); // non-blocking
+  runBroadcast(template, phoneList, imageUrl);
 });
 
-// POST /api/template/schedule — create scheduled broadcast
+// POST /api/template/schedule
 router.post('/schedule', upload.single('image'), async (req, res) => {
   const { title, message, footer, phones, scheduleTime, repeatDaily, scheduleDays } = req.body;
   if (!scheduleTime) return res.status(400).json({ success: false, message: 'scheduleTime required (HH:MM)' });
@@ -143,13 +148,11 @@ router.post('/schedule', upload.single('image'), async (req, res) => {
   res.json({ success: true, template, message: `Scheduled for ${scheduleTime}` });
 });
 
-// GET /api/template/schedules
 router.get('/schedules', async (req, res) => {
   const schedules = await Template.find({ isScheduled: true }).sort('-createdAt');
   res.json({ success: true, schedules });
 });
 
-// PUT /api/template/schedule/:id/toggle
 router.put('/schedule/:id/toggle', async (req, res) => {
   const t = await Template.findById(req.params.id);
   if (!t) return res.status(404).json({ success: false, message: 'Not found' });
@@ -158,19 +161,16 @@ router.put('/schedule/:id/toggle', async (req, res) => {
   res.json({ success: true, template: t });
 });
 
-// DELETE /api/template/schedule/:id
 router.delete('/schedule/:id', async (req, res) => {
   await Template.findByIdAndDelete(req.params.id);
   res.json({ success: true });
 });
 
-// GET /api/template — all sent templates (not schedules)
 router.get('/', async (req, res) => {
   const templates = await Template.find({ isScheduled: { $ne: true } }).sort('-createdAt');
   res.json({ success: true, templates });
 });
 
-// Called by cron every minute to fire due schedules
 const runScheduledTemplates = async () => {
   const now = new Date();
   const due = await Template.find({ isScheduled: true, isActive: true, nextRunAt: { $lte: now }, status: { $ne: 'sending' } });

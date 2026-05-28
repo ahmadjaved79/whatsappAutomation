@@ -8,22 +8,38 @@ import {
 import api from '../api';
 import './Layout.css';
 
-const navItems = [
-  { to: '/dashboard',      icon: LayoutDashboard,  label: 'Dashboard' },
-  { to: '/contacts',       icon: Users,             label: 'Contacts' },
-  { to: '/template',       icon: Megaphone,         label: 'Template' },
-  { to: '/orders',         icon: ShoppingBag,       label: 'Orders' },
-  { to: '/menu',           icon: UtensilsCrossed,   label: 'Menu' },
-  // ── New pages ──────────────────────────────────────────────
-  { to: '/revenue',        icon: BarChart2,         label: 'Revenue' },
-  { to: '/customers',      icon: UserCircle,        label: 'Customers' },
-  { to: '/schedule',       icon: Clock,             label: 'Schedule' },
-  { to: '/manual-message', icon: MessageCircle,     label: 'Send Message' },
-  { to: '/stock',          icon: Package,           label: 'Stock' },
+const navGroups = [
+  {
+    label: 'Overview',
+    items: [
+      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/orders',    icon: ShoppingBag,     label: 'Orders'    },
+      { to: '/revenue',   icon: BarChart2,        label: 'Revenue'   },
+    ],
+  },
+  {
+    label: 'Messaging',
+    items: [
+      { to: '/template',        icon: Megaphone,      label: 'Template'     },
+      { to: '/schedule',        icon: Clock,           label: 'Schedule'     },
+      { to: '/manual-message',  icon: MessageCircle,   label: 'Send Message' },
+    ],
+  },
+  {
+    label: 'Manage',
+    items: [
+      { to: '/contacts',  icon: Users,           label: 'Contacts'  },
+      { to: '/customers', icon: UserCircle,      label: 'Customers' },
+      { to: '/menu',      icon: UtensilsCrossed, label: 'Menu'      },
+      { to: '/stock',     icon: Package,          label: 'Stock'     },
+    ],
+  },
 ];
 
+const allNavItems = navGroups.flatMap(g => g.items);
+
 export default function Layout() {
-  const [wppStatus, setWppStatus] = useState('DISCONNECTED');
+  const [wppStatus, setWppStatus]     = useState('DISCONNECTED');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
 
@@ -34,96 +50,131 @@ export default function Layout() {
         setWppStatus(data.status);
       } catch {}
     };
-
     fetchStatus();
-    const interval = setInterval(fetchStatus, 3000);
+    const interval = setInterval(fetchStatus, 5000);
 
-    let es;
-    try {
-      es = new EventSource((process.env.REACT_APP_API_URL || 'http://localhost:5000') + '/api/whatsapp/status/stream');
-      es.onmessage = (e) => {
-        try { const d = JSON.parse(e.data); setWppStatus(d.status); } catch {}
-      };
-    } catch {}
+    const BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    let es = null, retryDelay = 3000, retryTimer = null, destroyed = false;
+    const connectSSE = () => {
+      if (destroyed) return;
+      try {
+        es = new EventSource(BASE + '/api/whatsapp/status/stream');
+        es.onopen = () => { retryDelay = 3000; };
+        es.onmessage = (e) => {
+          try { const d = JSON.parse(e.data); setWppStatus(d.status); } catch {}
+        };
+        es.onerror = () => {
+          es.close(); es = null;
+          if (!destroyed) {
+            retryTimer = setTimeout(() => {
+              retryDelay = Math.min(retryDelay * 2, 30000);
+              connectSSE();
+            }, retryDelay);
+          }
+        };
+      } catch {}
+    };
+    connectSSE();
 
     return () => {
+      destroyed = true;
       clearInterval(interval);
+      clearTimeout(retryTimer);
       if (es) es.close();
     };
   }, []);
 
-  const statusColor = {
-    CONNECTED:    '#1A7A4A',
-    DISCONNECTED: '#C8102E',
-    QR_READY:     '#D4A017',
-    INITIALIZING: '#E05C00',
-    ERROR:        '#C8102E',
+  // Close sidebar on route change (mobile)
+  useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
+
+  const statusMeta = {
+    CONNECTED:    { color: '#16a34a', label: 'Connected'    },
+    DISCONNECTED: { color: '#c8102e', label: 'Disconnected' },
+    QR_READY:     { color: '#d97706', label: 'Scan QR'      },
+    INITIALIZING: { color: '#ea580c', label: 'Connecting…'  },
+    ERROR:        { color: '#c8102e', label: 'Error'         },
   };
-  const statusLabel = {
-    CONNECTED:    'WhatsApp Connected',
-    DISCONNECTED: 'Not Connected',
-    QR_READY:     'Scan QR Code',
-    INITIALIZING: 'Connecting...',
-    ERROR:        'Connection Error',
-  };
+  const meta = statusMeta[wppStatus] || statusMeta.DISCONNECTED;
+
+  const statusClass =
+    wppStatus === 'CONNECTED'    ? 'connected'    :
+    wppStatus === 'INITIALIZING' ? 'loading'      : 'disconnected';
+
+  const currentPage = allNavItems.find(n =>
+    location.pathname === n.to || location.pathname.startsWith(n.to + '/')
+  )?.label || 'Dashboard';
 
   return (
     <div className="layout">
-      {sidebarOpen && <div className="overlay" onClick={() => setSidebarOpen(false)} />}
+      {/* Overlay — mobile only */}
+      {sidebarOpen && (
+        <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+      )}
 
-      {/* Sidebar */}
-      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
-        <div className="sidebar-header">
-          <div className="logo">
-            <span className="logo-icon">🥩</span>
+      {/* ── Sidebar ───────────────────────────────── */}
+      <aside className={`sidebar ${sidebarOpen ? 'sidebar--open' : ''}`}>
+
+        <div className="sidebar__header">
+          <div className="sidebar__logo">
+            <div className="sidebar__logo-icon">🥩</div>
             <div>
-              <div className="logo-title">FreshMeat</div>
-              <div className="logo-sub">Shop Manager</div>
+              <div className="sidebar__logo-title">FreshMeat</div>
+              <div className="sidebar__logo-sub">Shop Manager</div>
             </div>
           </div>
-          <button className="close-btn" onClick={() => setSidebarOpen(false)}><X size={18} /></button>
+          <button className="sidebar__close" onClick={() => setSidebarOpen(false)}>
+            <X size={17} />
+          </button>
         </div>
 
-        <nav className="nav">
-          {navItems.map(({ to, icon: Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-              onClick={() => setSidebarOpen(false)}
-            >
-              <Icon size={18} />
-              <span>{label}</span>
-            </NavLink>
+        <nav className="sidebar__nav">
+          {navGroups.map(group => (
+            <div key={group.label}>
+              <div className="sidebar__group-label">{group.label}</div>
+              {group.items.map(({ to, icon: Icon, label }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) => `sidebar__link ${isActive ? 'sidebar__link--active' : ''}`}
+                >
+                  <Icon size={17} className="sidebar__link-icon" />
+                  <span>{label}</span>
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
 
-        <div className="sidebar-footer">
-          <div className="wpp-status" style={{ '--dot-color': statusColor[wppStatus] || '#ADADAD' }}>
-            <span className="status-dot" />
-            <span>{statusLabel[wppStatus] || wppStatus}</span>
+        <div className="sidebar__footer">
+          <div className="sidebar__status" style={{ '--dot': meta.color }}>
+            <span className="sidebar__status-dot" />
+            <span>{meta.label}</span>
           </div>
         </div>
       </aside>
 
-      {/* Main */}
+      {/* ── Main area ─────────────────────────────── */}
       <div className="main-wrapper">
+
+        {/* Topbar */}
         <header className="topbar">
-          <button className="menu-btn" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
-          <div className="topbar-title">
-            {navItems.find(n => location.pathname.includes(n.to.slice(1)))?.label || 'Dashboard'}
-          </div>
-          <div className="topbar-status" style={{ color: statusColor[wppStatus] }}>
-            {wppStatus === 'CONNECTED'
-              ? <Wifi size={16} />
-              : wppStatus === 'INITIALIZING'
-              ? <Loader2 size={16} className="spin" />
-              : <WifiOff size={16} />
-            }
-            <span className="hide-mobile">{statusLabel[wppStatus]}</span>
+          <button className="topbar__menu-btn" onClick={() => setSidebarOpen(true)}>
+            <Menu size={20} />
+          </button>
+
+          <span className="topbar__title">{currentPage}</span>
+
+          <div className="topbar__right">
+            <div className={`topbar__status topbar__status--${statusClass}`}>
+              {wppStatus === 'CONNECTED'    ? <Wifi size={13} />              :
+               wppStatus === 'INITIALIZING' ? <Loader2 size={13} className="spin" /> :
+                                              <WifiOff size={13} />}
+              <span className="topbar__status-label">{meta.label}</span>
+            </div>
           </div>
         </header>
 
+        {/* Page content */}
         <main className="main-content">
           <Outlet />
         </main>

@@ -2,19 +2,20 @@ const Order        = require('../models/Order');
 const Contact      = require('../models/Contact');
 const Menu         = require('../models/Menu');
 const Conversation = require('../models/Conversation');
+const Template     = require('../models/Template');
 const { v4: uuidv4 } = require('uuid');
 const { sendTextMessage, sendImageMessage } = require('./whatsappService');
 
 const STATES = {
-  IDLE: 'IDLE',
-  AWAITING_INTEREST: 'AWAITING_INTEREST',
+  IDLE:                    'IDLE',
+  AWAITING_INTEREST:       'AWAITING_INTEREST',
   AWAITING_ITEM_SELECTION: 'AWAITING_ITEM_SELECTION',
-  AWAITING_QUANTITY: 'AWAITING_QUANTITY',
-  ORDER_CONFIRMED: 'ORDER_CONFIRMED',
+  AWAITING_QUANTITY:       'AWAITING_QUANTITY',
+  ORDER_CONFIRMED:         'ORDER_CONFIRMED',
 };
 
-const sleep   = (ms) => new Promise(r => setTimeout(r, ms));
-const digits  = (phone) => String(phone).replace(/\D/g, '');
+const sleep  = (ms) => new Promise(r => setTimeout(r, ms));
+const digits = (phone) => String(phone).replace(/\D/g, '');
 
 const toSendPhone = (phone) => {
   const d = digits(phone);
@@ -24,35 +25,50 @@ const toSendPhone = (phone) => {
 };
 const toDbPhone = (phone) => toSendPhone(phone);
 
-// ── Resolve @lid or @c.us to actual phone ────────────────────────────────────
-const resolvePhone = async (message, client) => {
+// ── Resolve JID → plain phone number ─────────────────────────────────────────
+const resolvePhone = async (message) => {
   const from = String(message.from || '');
-  if (from.includes('@lid')) {
-    console.log(`🔍 Resolving LID: ${from}`);
-    try {
-      const entry = await client.getPnLidEntry(from);
-      console.log('PnLid resolved:', JSON.stringify(entry));
-      if (entry?.phoneNumber?.user) return digits(entry.phoneNumber.user);
-      if (entry?.phoneNumber?._serialized) return digits(entry.phoneNumber._serialized.replace('@c.us', ''));
-    } catch (e) { console.log('getPnLidEntry failed:', e.message); }
-    try {
-      const contact = await client.getContact(from);
-      if (contact?.number) return digits(contact.number);
-      if (contact?.id?.user) return digits(contact.id.user);
-    } catch (e) { console.log('getContact failed:', e.message); }
-    try { const chat = await client.getChatById(from); if (chat?.id?.user) return digits(chat.id.user); } catch {}
-    const fallback = digits(from.replace(/@[\w.]+/g, ''));
-    console.log(`⚠️ LID fallback: ${fallback}`);
-    return fallback;
+
+  // @lid = WhatsApp internal Linked ID, NOT a phone number — resolve via DB
+  if (from.endsWith('@lid')) {
+    const lidNum = from.split('@')[0];
+
+    // 1. Check if we already stored this LID in a Conversation
+    const byLid = await Conversation.findOne({ lid: lidNum });
+    if (byLid) {
+      console.log(`🔗 LID cached → phone ${byLid.phone}`);
+      return byLid.phone;
+    }
+
+    // 2. Match to most recently active session that has no LID yet (within 30 min)
+    const recent = await Conversation.findOne({
+      state:     { $ne: 'IDLE' },
+      lid:       null,
+      updatedAt: { $gte: new Date(Date.now() - 30 * 60 * 1000) }
+    }).sort('-updatedAt');
+
+    if (recent) {
+      await Conversation.findByIdAndUpdate(recent._id, { lid: lidNum });
+      console.log(`🔗 LID ${lidNum} → phone ${recent.phone}`);
+      return recent.phone;
+    }
+
+    console.log(`❌ LID ${lidNum} unresolvable — no active session`);
+    return null;
   }
-  const raw = digits(from.replace('@c.us', ''));
+
+  const raw = digits(from.split('@')[0]);
   return toDbPhone(raw);
 };
 
 // ── Session helpers ───────────────────────────────────────────────────────────
 const setSession = async (phone, data) => {
   const key = toDbPhone(phone);
-  await Conversation.findOneAndUpdate({ phone: key }, { ...data, updatedAt: new Date() }, { upsert: true, new: true });
+  await Conversation.findOneAndUpdate(
+    { phone: key },
+    { ...data, updatedAt: new Date() },
+    { upsert: true, new: true }
+  );
 };
 
 const findActiveSession = async (phone) => {
@@ -66,12 +82,15 @@ const findActiveSession = async (phone) => {
   }
   if (d.length === 10) {
     s = await Conversation.findOne({ phone: '91' + d, state: { $ne: STATES.IDLE } });
-    if (s) { await Conversation.findOneAndUpdate({ phone: '91' + d }, { phone: d }); return { session: s, key: d }; }
+    if (s) {
+      await Conversation.findOneAndUpdate({ phone: '91' + d }, { phone: d });
+      return { session: s, key: d };
+    }
   }
   return { session: null, key: toDbPhone(d) };
 };
 
-// ── Contact update with segment refresh ───────────────────────────────────────
+// ── Contact update with segment refresh ──────────────────────────────────────
 const updateContact = async (key, status, extra = {}) => {
   try {
     const phone10 = toSendPhone(key);
@@ -87,7 +106,11 @@ const updateContact = async (key, status, extra = {}) => {
 // ── STOP — opt-out ────────────────────────────────────────────────────────────
 const handleOptOut = async (phone) => {
   const phone10 = toSendPhone(phone);
-  await Contact.findOneAndUpdate({ phone: phone10 }, { optedOut: true, optedOutAt: new Date(), lastStatus: 'opted_out' }, { upsert: true });
+  await Contact.findOneAndUpdate(
+    { phone: phone10 },
+    { optedOut: true, optedOutAt: new Date(), lastStatus: 'opted_out' },
+    { upsert: true }
+  );
   await setSession(phone, { state: STATES.IDLE });
   await sendTextMessage(phone10,
     `✅ You have been unsubscribed from FreshMeat Shop.\nYou will no longer receive messages.\n\nReply *START* anytime to re-subscribe. 🙏`
@@ -98,7 +121,11 @@ const handleOptOut = async (phone) => {
 // ── START — opt-in ────────────────────────────────────────────────────────────
 const handleOptIn = async (phone) => {
   const phone10 = toSendPhone(phone);
-  await Contact.findOneAndUpdate({ phone: phone10 }, { optedOut: false, $unset: { optedOutAt: '' }, lastStatus: 'opted_in' }, { upsert: true });
+  await Contact.findOneAndUpdate(
+    { phone: phone10 },
+    { optedOut: false, $unset: { optedOutAt: '' }, lastStatus: 'opted_in' },
+    { upsert: true }
+  );
   await sendTextMessage(phone10, `👋 Welcome back! You are now subscribed again.\nReply *ORDER* to place an order 🥩`);
 };
 
@@ -107,17 +134,16 @@ const handleMessage = async (message, client) => {
   if (message.isGroupMsg) return;
   if (!['chat', 'buttons_response', 'list_response'].includes(message.type)) return;
 
-  const rawPhone = await resolvePhone(message, client);
+  const rawPhone = await resolvePhone(message);
+  if (!rawPhone) return; // LID couldn't be resolved
   const phone    = toDbPhone(rawPhone);
-  const body     = (message.selectedButtonId || message.selectedRowId || message.body || '').trim().toLowerCase();
+  const body     = (message.body || '').trim().toLowerCase();
 
   console.log(`📨 [${phone}] msg="${body}" (raw: ${message.from})`);
 
-  // Handle STOP/START before anything else
   if (body === 'stop' || body === 'unsubscribe') { await handleOptOut(phone); return; }
   if (body === 'start' || body === 'subscribe')  { await handleOptIn(phone);  return; }
 
-  // Check opted-out
   const contact = await Contact.findOne({ phone: toSendPhone(phone) });
   if (contact?.optedOut) { console.log(`⛔ ${phone} opted out — ignoring`); return; }
 
@@ -125,11 +151,11 @@ const handleMessage = async (message, client) => {
 
   if (session) {
     console.log(`✅ Session found: state=${session.state} key=${key}`);
-    if (session.state === STATES.AWAITING_INTEREST)       return handleInterestResponse(key, body, session);
-    if (session.state === STATES.AWAITING_ITEM_SELECTION) return handleItemSelection(key, body, session);
-    if (session.state === STATES.AWAITING_QUANTITY)        return handleQuantityInput(key, body, session);
+    if (session.state === STATES.AWAITING_INTEREST)        return handleInterestResponse(key, body, session);
+    if (session.state === STATES.AWAITING_ITEM_SELECTION)  return handleItemSelection(key, body, session);
+    if (session.state === STATES.AWAITING_QUANTITY)         return handleQuantityInput(key, body, session);
     if (session.state === STATES.ORDER_CONFIRMED) {
-      if (['order','reorder','again'].includes(body)) {
+      if (['order', 'reorder', 'again'].includes(body)) {
         await sendMenuItems(toSendPhone(key));
         await setSession(key, { state: STATES.AWAITING_ITEM_SELECTION, selectedItems: [], currentItemIndex: 0 });
       }
@@ -137,36 +163,44 @@ const handleMessage = async (message, client) => {
     }
   } else {
     console.log(`⚠️  No active session for [${phone}]`);
-    const all = await Conversation.find({ state: { $ne: STATES.IDLE } });
-    console.log('Active sessions:', all.map(s => `${s.phone}(${s.state})`).join(', ') || 'none');
   }
 
   if (body === 'order') {
     await sendMenuItems(toSendPhone(phone));
     await setSession(phone, { state: STATES.AWAITING_ITEM_SELECTION, selectedItems: [], currentItemIndex: 0 });
-  } else if (['hi','hello','hlo','hey'].includes(body)) {
+  } else if (['hi', 'hello', 'hlo', 'hey'].includes(body)) {
     await sendTextMessage(toSendPhone(phone), '👋 Hello! Reply *ORDER* to place an order 🥩\n\n_Reply STOP to unsubscribe_');
   }
 };
 
 // ── Template start ────────────────────────────────────────────────────────────
-const startTemplate = async (phone, imageUrl, templateText, headerText, footerText, client) => {
+// templateId is passed so interested/notInterested/ordersGenerated can be tracked
+const startTemplate = async (phone, imageUrl, templateText, headerText, footerText, client, templateId) => {
   const d  = toDbPhone(phone);
   const sp = toSendPhone(phone);
 
   const contact = await Contact.findOne({ phone: sp });
   if (contact?.optedOut) { console.log(`⛔ Skipping opted-out: ${sp}`); return; }
 
-  await setSession(d, { state: STATES.AWAITING_INTEREST, selectedItems: [], currentItemIndex: 0 });
-  console.log(`📤 Template session set for: ${d}`);
+  // Store templateId in session so responses can update the template stats
+  await setSession(d, {
+    state: STATES.AWAITING_INTEREST,
+    selectedItems: [],
+    currentItemIndex: 0,
+    templateId: templateId || null,
+  });
+  console.log(`📤 Template session set for: ${d} (templateId: ${templateId || 'none'})`);
 
   const name  = contact?.name  || '';
   const email = contact?.email || '';
-  const personalize = (text) => !text ? '' : text.replace(/{Name}/gi, name).replace(/{Email}/gi, email).replace(/{Phone}/gi, phone);
+  const personalize = (text) => !text ? '' : text
+    .replace(/{Name}/gi, name)
+    .replace(/{Email}/gi, email)
+    .replace(/{Phone}/gi, phone);
 
-  const pHeader  = personalize(headerText || 'Fresh Stock Available!');
+  const pHeader  = personalize(headerText  || 'Fresh Stock Available!');
   const pMessage = personalize(templateText);
-  const pFooter  = personalize(footerText || '');
+  const pFooter  = personalize(footerText  || '');
 
   if (imageUrl) {
     try { await sendImageMessage(sp, imageUrl, pHeader); await sleep(1500); }
@@ -182,15 +216,30 @@ const startTemplate = async (phone, imageUrl, templateText, headerText, footerTe
 // ── Interest response ─────────────────────────────────────────────────────────
 const handleInterestResponse = async (key, body, session) => {
   const sp  = toSendPhone(key);
-  const yes = ['1','yes','interested','haan','ok','okay','sure','ha','yep','yeah','y'].some(w => body === w || body.startsWith(w));
-  const no  = ['2','no','nahi','nope','not','nahin','n'].some(w => body === w || body.startsWith(w));
+  const yes = ['1', 'yes', 'interested', 'haan', 'ok', 'okay', 'sure', 'ha', 'yep', 'yeah', 'y'].some(w => body === w || body.startsWith(w));
+  const no  = ['2', 'no', 'nahi', 'nope', 'not', 'nahin', 'n'].some(w => body === w || body.startsWith(w));
 
   if (yes) {
+    // ── INCREMENT interested count on the template ──────────────────────────
+    if (session.templateId) {
+      try {
+        await Template.findByIdAndUpdate(session.templateId, { $inc: { interested: 1 } });
+        console.log(`📊 Template ${session.templateId} interested++ (phone: ${sp})`);
+      } catch (e) { console.warn('Failed to update template interested count:', e.message); }
+    }
+    await updateContact(key, 'interested');
     await sendTextMessage(sp, '🎉 Great! Let me show you today\'s fresh menu...');
     await sleep(800);
     await sendMenuItems(sp);
-    await setSession(key, { state: STATES.AWAITING_ITEM_SELECTION });
+    await setSession(key, { state: STATES.AWAITING_ITEM_SELECTION, templateId: session.templateId });
   } else if (no) {
+    // ── INCREMENT notInterested count on the template ───────────────────────
+    if (session.templateId) {
+      try {
+        await Template.findByIdAndUpdate(session.templateId, { $inc: { notInterested: 1 } });
+        console.log(`📊 Template ${session.templateId} notInterested++ (phone: ${sp})`);
+      } catch (e) { console.warn('Failed to update template notInterested count:', e.message); }
+    }
     await sendNotInterestedMessage(sp);
     await setSession(key, { state: STATES.IDLE });
     await updateContact(key, 'not_interested');
@@ -209,7 +258,8 @@ const sendMenuItems = async (sp) => {
     const e = item.category === 'mutton' ? '🐑' : item.category === 'chicken' ? '🐔' : '⭐';
     txt += `*${i + 1}.* ${e} *${item.name}*\n    💰 ₹${item.price} / ${item.unit}\n`;
     if (item.description) txt += `    _${item.description}_\n`;
-    if (item.stockQty !== null && item.stockQty !== undefined && item.stockQty <= item.stockThreshold) txt += `    ⚠️ _Limited stock!_\n`;
+    if (item.stockQty !== null && item.stockQty !== undefined && item.stockQty <= item.stockThreshold)
+      txt += `    ⚠️ _Limited stock!_\n`;
     txt += '\n';
   });
   txt += `──────────────────────\n📝 *Select by number*\nExample: *1* or *1,3* or *2,4,5*\n✅ Multiple items allowed!`;
@@ -222,23 +272,29 @@ const handleItemSelection = async (key, body, session) => {
   if (body === 'menu') { await sendMenuItems(sp); return; }
 
   const items   = await Menu.find({ available: true }).sort('category name');
-  const indices = body.split(/[,\s]+/).map(n => parseInt(n.trim()) - 1)
+  const indices = body.split(/[,\s]+/)
+    .map(n => parseInt(n.trim()) - 1)
     .filter(n => !isNaN(n) && n >= 0 && n < items.length);
 
-  if (!indices.length) { await sendTextMessage(sp, `❌ Invalid. Enter numbers like *1* or *1,3*\nType *menu* to see menu again.`); return; }
+  if (!indices.length) {
+    await sendTextMessage(sp, `❌ Invalid. Enter numbers like *1* or *1,3*\nType *menu* to see menu again.`);
+    return;
+  }
 
   const selected = [...new Set(indices)].map(i => ({
     item: { _id: items[i]._id, name: items[i].name, price: items[i].price, unit: items[i].unit, category: items[i].category },
     quantity: 0,
   }));
-  await setSession(key, { state: STATES.AWAITING_QUANTITY, selectedItems: selected, currentItemIndex: 0 });
+  await setSession(key, { state: STATES.AWAITING_QUANTITY, selectedItems: selected, currentItemIndex: 0, templateId: session.templateId });
   await askQuantity(sp, selected[0].item);
 };
 
 // ── Ask quantity ──────────────────────────────────────────────────────────────
 const askQuantity = async (sp, item) => {
   const e = item.category === 'mutton' ? '🐑' : item.category === 'chicken' ? '🐔' : '⭐';
-  await sendTextMessage(sp, `${e} *${item.name}*\n💰 ₹${item.price} per ${item.unit}\n\n📦 How many *${item.unit}*?\n_(e.g. *0.5* = 500g, *1* = 1kg)_`);
+  await sendTextMessage(sp,
+    `${e} *${item.name}*\n💰 ₹${item.price} per ${item.unit}\n\n📦 How many *${item.unit}*?\n_(e.g. *0.5* = 500g, *1* = 1kg)_`
+  );
 };
 
 // ── Quantity input ────────────────────────────────────────────────────────────
@@ -248,19 +304,19 @@ const handleQuantityInput = async (key, body, session) => {
   if (isNaN(qty) || qty <= 0) { await sendTextMessage(sp, '❌ Enter a valid quantity like *0.5* or *1*'); return; }
 
   const { selectedItems, currentItemIndex } = session;
-  selectedItems[currentItemIndex].quantity = qty;
+  selectedItems[currentItemIndex].quantity  = qty;
   const next = currentItemIndex + 1;
 
   if (next < selectedItems.length) {
-    await setSession(key, { selectedItems, currentItemIndex: next });
+    await setSession(key, { selectedItems, currentItemIndex: next, templateId: session.templateId });
     await askQuantity(sp, selectedItems[next].item);
   } else {
-    await confirmOrder(key, sp, selectedItems);
+    await confirmOrder(key, sp, selectedItems, session.templateId);
   }
 };
 
 // ── Confirm order ─────────────────────────────────────────────────────────────
-const confirmOrder = async (key, sp, selectedItems) => {
+const confirmOrder = async (key, sp, selectedItems, templateId) => {
   const orderId = 'ORD-' + uuidv4().slice(0, 8).toUpperCase();
   let total = 0, itemsSummary = '';
 
@@ -271,16 +327,28 @@ const confirmOrder = async (key, sp, selectedItems) => {
     return { menuItem: item._id, name: item.name, quantity, unit: item.unit, price: item.price, total: amount };
   });
 
-  // Deduct stock
   for (const { item, quantity } of selectedItems) {
     await Menu.findByIdAndUpdate(item._id, { $inc: { stockQty: -quantity } }).catch(() => {});
   }
 
-  const order = new Order({ orderId, customerPhone: toSendPhone(key), items: orderItems, totalAmount: total, status: 'confirmed' });
+  const order = new Order({
+    orderId,
+    customerPhone: toSendPhone(key),
+    items: orderItems,
+    totalAmount: total,
+    status: 'confirmed',
+  });
   await order.save();
   await setSession(key, { state: STATES.ORDER_CONFIRMED, selectedItems: [], currentItemIndex: 0 });
 
-  // Update contact stats + segment
+  // ── INCREMENT ordersGenerated on the template ─────────────────────────────
+  if (templateId) {
+    try {
+      await Template.findByIdAndUpdate(templateId, { $inc: { ordersGenerated: 1 } });
+      console.log(`📊 Template ${templateId} ordersGenerated++ (order: ${orderId})`);
+    } catch (e) { console.warn('Failed to update template ordersGenerated:', e.message); }
+  }
+
   await updateContact(key, 'ordered', { $inc: { ordersPlaced: 1, totalSpend: total }, lastOrderAt: new Date() });
 
   await sendTextMessage(sp,
@@ -370,15 +438,18 @@ const handlePollResponse = async (pollResponse, client) => {
   if (!validOptions.length) return;
 
   const selectedText = validOptions[0].name || '';
-  const dedupKey = `${pollResponse.msgId || 'default'}_${selectedText}`;
-  const now = Date.now();
+  const dedupKey     = `${pollResponse.msgId || 'default'}_${selectedText}`;
+  const now          = Date.now();
+
   if (processedPolls.has(dedupKey) && now < processedPolls.get(dedupKey)) {
     console.log(`ℹ️ Duplicate poll ignored: ${dedupKey}`); return;
   }
   processedPolls.set(dedupKey, now + 3000);
-  if (processedPolls.size > 200) { for (const [k, exp] of processedPolls.entries()) { if (now > exp) processedPolls.delete(k); } }
+  if (processedPolls.size > 200) {
+    for (const [k, exp] of processedPolls.entries()) { if (now > exp) processedPolls.delete(k); }
+  }
 
-  const fromField = pollResponse.chatId || pollResponse.sender || '';
+  const fromField   = pollResponse.chatId || pollResponse.sender || '';
   const mockMessage = { from: String(fromField), body: selectedText, type: 'chat', isGroupMsg: false };
   console.log(`📨 [poll] raw_from="${fromField}" selected="${selectedText}"`);
   await handleMessage(mockMessage, client);
