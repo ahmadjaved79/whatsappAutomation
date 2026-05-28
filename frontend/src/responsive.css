@@ -197,6 +197,7 @@
   .search-input { min-width: unset; width: 100%; }
 
   /* Table becomes card-list on mobile */
+  .resp-table { min-width: unset !important; }
   .resp-table,
   .resp-table thead,
   .resp-table tbody,
