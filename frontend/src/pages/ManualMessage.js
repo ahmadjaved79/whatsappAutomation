@@ -29,8 +29,14 @@ export default function ManualMessage() {
   const [message, setMessage]       = useState('');
   const [sending, setSending]       = useState(false);
   const [log, setLog]               = useState([]);
+  const [isMobile, setIsMobile]     = useState(window.innerWidth < 768);
 
-  useEffect(() => { fetchContacts(); }, []);
+  useEffect(() => { 
+    fetchContacts(); 
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const fetchContacts = async () => {
     const { data } = await api.get('/api/contacts');
@@ -57,10 +63,10 @@ export default function ManualMessage() {
   };
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 80px)', fontFamily: 'inherit' }}>
+    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: isMobile ? 'auto' : 'calc(100vh - 80px)', fontFamily: 'inherit' }}>
 
       {/* Left contact list */}
-      <div style={{ width: 280, borderRight: '1px solid #F0F0F0', display: 'flex', flexDirection: 'column', flexShrink: 0, background: '#fff' }}>
+      <div style={{ width: isMobile ? '100%' : 280, borderRight: isMobile ? 'none' : '1px solid #F0F0F0', borderBottom: isMobile ? '1px solid #F0F0F0' : 'none', display: 'flex', flexDirection: 'column', flexShrink: 0, background: '#fff', height: isMobile ? '320px' : 'auto' }}>
         <div style={{ padding: '16px 14px 12px', borderBottom: '1px solid #F0F0F0' }}>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 10, color: '#1a1a1a' }}>Select Contact</div>
           <div style={{ position: 'relative', marginBottom: 8 }}>
@@ -89,7 +95,7 @@ export default function ManualMessage() {
       </div>
 
       {/* Right compose */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', background: '#FAFAFA' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', background: '#FAFAFA', height: 'auto' }}>
         <div style={{ padding: '18px 22px', borderBottom: '1px solid #F0F0F0', background: '#fff' }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a1a', marginBottom: 2 }}>Send WhatsApp Message</div>
           <div style={{ fontSize: 13, color: '#888' }}>

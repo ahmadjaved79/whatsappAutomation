@@ -9,7 +9,6 @@ import {
 /* ── Inline style objects ───────────────────────────────────── */
 const S = {
   page:  { animation: 'fadeIn .35s ease' },
-  grid:  { display: 'grid', gridTemplateColumns: '1fr 400px', gap: 20, alignItems: 'start' },
   card:  { background: '#fff', borderRadius: 16, padding: '22px 24px', boxShadow: '0 2px 12px rgba(0,0,0,.07)', border: '1px solid #f0f0f0', marginBottom: 16 },
   title: { fontSize: 15, fontWeight: 700, color: '#1a1a1a', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 },
   label: { display: 'block', fontSize: 11.5, fontWeight: 700, color: '#555', marginBottom: 6, textTransform: 'uppercase', letterSpacing: .5 },
@@ -42,12 +41,19 @@ export default function Template() {
   const [contactSearch, setContactSearch] = useState('');
   const [expandedId, setExpandedId]       = useState(null);
   const [dragging, setDragging]           = useState(false);
+  const [isMobile, setIsMobile]           = useState(window.innerWidth < 768);
 
   const fileRef  = useRef();
   const titleRef = useRef();
   const msgRef   = useRef();
 
   useEffect(() => { loadContacts(); loadTemplates(); }, []);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const loadContacts = async () => {
     try {
@@ -59,9 +65,7 @@ export default function Template() {
   const loadTemplates = async () => {
     try {
       const { data } = await api.get('/api/template');
-      console.log('Templates API response:', data.success, 'count:', data.templates?.length);
       if (data.success) {
-        console.log('First template sample:', JSON.stringify(data.templates?.[0]));
         setTemplates(data.templates || []);
       }
     } catch (e) {
@@ -129,17 +133,17 @@ export default function Template() {
     <div style={S.page} className="animate-in">
 
       {/* Top bar */}
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 }}>
+      <div style={{ display:'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent:'space-between', alignItems: isMobile ? 'stretch' : 'flex-start', marginBottom:20, gap: 12 }}>
         <div>
-          <h1 style={{ fontSize:22, fontWeight:800, color:'#0f172a', margin:0 }}>Broadcast Templates</h1>
+          <h1 style={{ fontSize: isMobile ? 18 : 22, fontWeight:800, color:'#0f172a', margin:0 }}>Broadcast Templates</h1>
           <p style={{ fontSize:13, color:'#64748b', marginTop:4 }}>Compose and send WhatsApp campaigns to your customers</p>
         </div>
-        <button onClick={loadTemplates} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:10, border:'1px solid #e2e8f0', background:'#fff', color:'#475569', fontSize:12.5, fontWeight:600, cursor:'pointer' }}>
+        <button onClick={loadTemplates} style={{ display:'flex', alignItems:'center', justifyContent: isMobile ? 'center' : 'flex-start', gap:6, padding:'8px 16px', borderRadius:10, border:'1px solid #e2e8f0', background:'#fff', color:'#475569', fontSize:12.5, fontWeight:600, cursor:'pointer' }}>
           <RefreshCw size={13} /> Refresh
         </button>
       </div>
 
-      <div style={S.grid}>
+      <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 400px', gap: 20, alignItems: 'start' }}>
 
         {/* ── LEFT: Compose ─────────────────────────────── */}
         <div>
@@ -221,7 +225,7 @@ export default function Template() {
             </div>
 
             {/* Radio options */}
-            <div style={{ display:'flex', gap:12, marginBottom: recipientMode === 'select' ? 16 : 0 }}>
+            <div style={{ display:'flex', flexDirection: isMobile ? 'column' : 'row', gap:12, marginBottom: recipientMode === 'select' ? 16 : 0 }}>
               {[
                 { val:'all',    label:'All Contacts',    sub:`${contacts.length} opted-in` },
                 { val:'select', label:'Select Contacts', sub:'Choose specific' },
@@ -252,7 +256,7 @@ export default function Template() {
 
             {/* Contact picker */}
             {recipientMode === 'select' && (
-              <div style={{ animation:'fadeIn .2s ease' }}>
+              <div style={{ marginTop: 12, animation:'fadeIn .2s ease' }}>
                 <div style={{ display:'flex', gap:10, marginBottom:10 }}>
                   <div style={{ flex:1, display:'flex', alignItems:'center', gap:7, background:'#f8fafc', border:'1.5px solid #e2e8f0', borderRadius:9, padding:'8px 12px' }}>
                     <Search size={13} color="#94a3b8" />
@@ -290,7 +294,7 @@ export default function Template() {
 
           {/* Send button */}
           <button onClick={send} disabled={sending || !form.message.trim() || recipientCount === 0}
-            style={{ width:'100%', padding:'15px 28px', background: sending ? '#94a3b8' : 'linear-gradient(135deg,#c8102e,#e8304a)', color:'#fff', border:'none', borderRadius:13, fontSize:14.5, fontWeight:700, cursor: sending?'wait':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:10, boxShadow:'0 4px 16px rgba(200,16,46,0.3)', opacity: (!form.message.trim()||recipientCount===0) ? 0.6 : 1 }}>
+            style={{ width:'100%', padding:'15px 28px', background: sending ? '#94a3b8' : 'linear-gradient(135deg,#c8102e,#e8304a)', color:'#fff', border:'none', borderRadius:13, fontSize:14.5, fontWeight:700, cursor: sending?'wait':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:10, boxShadow:'0 4px 16px rgba(200,16,46,0.3)', opacity: (!form.message.trim()||recipientCount===0) ? 0.6 : 1, marginBottom: 16 }}>
             {sending
               ? <><span style={{ width:16,height:16,border:'2px solid rgba(255,255,255,.35)',borderTopColor:'#fff',borderRadius:'50%',animation:'spin .7s linear infinite',display:'inline-block' }} />Sending to {recipientCount} contacts…</>
               : <><Send size={16} />Send to {recipientCount} Contact{recipientCount!==1?'s':''}</>

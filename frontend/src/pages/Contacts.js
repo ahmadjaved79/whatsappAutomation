@@ -25,9 +25,16 @@ export default function Contacts() {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const fileRef = useRef();
 
   useEffect(() => { loadContacts(); }, []);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const loadContacts = async () => {
     try { const {data} = await api.get('/api/contacts'); if(data.success) setContacts(data.contacts); }
@@ -94,7 +101,7 @@ export default function Contacts() {
 
   return (
     <div style={S.page} className="animate-in">
-      <div style={S.row}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
         {/* Excel Upload */}
         <div style={S.card}>
           <div style={S.title}><FileSpreadsheet size={17} color="#1A7A4A"/>Upload Excel File</div>
@@ -154,9 +161,9 @@ export default function Contacts() {
 
       {/* Save Bar */}
       {allPending.length>0 && (
-        <div style={{...S.card,background:'linear-gradient(135deg,#1A7A4A,#22A05E)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 22px'}}>
-          <div><span style={{fontSize:18,fontWeight:800}}>{allPending.length}</span> <span style={{fontSize:14}}>contacts ready to save</span></div>
-          <button onClick={saveAll} disabled={saving} style={{...S.btn,background:'#fff',color:'#1A7A4A',fontWeight:700}}>
+        <div style={{...S.card,background:'linear-gradient(135deg,#1A7A4A,#22A05E)',color:'#fff',display:'flex',flexDirection: isMobile ? 'column' : 'row',alignItems:'center',justifyContent:'space-between',padding:'16px 22px',gap:12}}>
+          <div style={{textAlign: isMobile ? 'center' : 'left'}}><span style={{fontSize:18,fontWeight:800}}>{allPending.length}</span> <span style={{fontSize:14}}>contacts ready to save</span></div>
+          <button onClick={saveAll} disabled={saving} style={{...S.btn,background:'#fff',color:'#1A7A4A',fontWeight:700,width: isMobile ? '100%' : 'auto',justifyContent:'center'}}>
             <Save size={14}/>{saving?'Saving…':'Save All Contacts'}
           </button>
         </div>
@@ -168,22 +175,22 @@ export default function Contacts() {
           <div style={S.title}><Users size={17} color="#555"/>Saved Contacts ({contacts.length})</div>
         </div>
         <div style={{overflowX:'auto'}}>
-          <table style={S.table}>
-            <thead><tr>{['Phone','Name','Email','Source','Status','Templates','Orders','Added'].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+          <table className="resp-table" style={S.table}>
+            <thead><tr>{['Phone','Name','Email','Source','Status','Templates','Orders','Added',''].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
             <tbody>
               {contacts.length===0 ? (
-                <tr><td colSpan={8} style={{...S.td,textAlign:'center',color:'#aaa',padding:30}}>No contacts yet. Upload an Excel file or add manually.</td></tr>
+                <tr><td colSpan={9} style={{...S.td,textAlign:'center',color:'#aaa',padding:30}}>No contacts yet. Upload an Excel file or add manually.</td></tr>
               ) : contacts.map(c=>(
                 <tr key={c._id}>
-                  <td style={{...S.td,fontWeight:600}}><Phone size={12} style={{marginRight:5,color:'#888'}}/>{c.phone}</td>
-                  <td style={S.td}>{c.name || '-'}</td>
-                  <td style={S.td}>{c.email || '-'}</td>
-                  <td style={S.td}><span style={{background:c.source==='excel'?'#E8F5E9':'#E3F2FD',color:c.source==='excel'?'#1A7A4A':'#1565C0',borderRadius:5,padding:'2px 8px',fontSize:11,fontWeight:600}}>{c.source}</span></td>
-                  <td style={S.td}><span style={{background:'#F9F9F9',borderRadius:5,padding:'2px 8px',fontSize:11,fontWeight:600,color:'#555'}}>{c.lastStatus||'pending'}</span></td>
-                  <td style={{...S.td,textAlign:'center'}}>{c.templatesSent||0}</td>
-                  <td style={{...S.td,textAlign:'center'}}>{c.ordersPlaced||0}</td>
-                  <td style={{...S.td,fontSize:11,color:'#888'}}>{new Date(c.createdAt).toLocaleDateString('en-IN')}</td>
-                  <td style={S.td}><button onClick={()=>deleteContact(c._id)} style={{background:'none',border:'none',cursor:'pointer',color:'#E57373',padding:4}}><Trash2 size={14}/></button></td>
+                  <td data-label="Phone" style={{...S.td,fontWeight:600}}><Phone size={12} style={{marginRight:5,color:'#888'}}/>{c.phone}</td>
+                  <td data-label="Name" style={S.td}>{c.name || '-'}</td>
+                  <td data-label="Email" style={S.td}>{c.email || '-'}</td>
+                  <td data-label="Source" style={S.td}><span style={{background:c.source==='excel'?'#E8F5E9':'#E3F2FD',color:c.source==='excel'?'#1A7A4A':'#1565C0',borderRadius:5,padding:'2px 8px',fontSize:11,fontWeight:600}}>{c.source}</span></td>
+                  <td data-label="Status" style={S.td}><span style={{background:'#F9F9F9',borderRadius:5,padding:'2px 8px',fontSize:11,fontWeight:600,color:'#555'}}>{c.lastStatus||'pending'}</span></td>
+                  <td data-label="Templates" style={{...S.td,textAlign: isMobile ? 'right' : 'center'}}>{c.templatesSent||0}</td>
+                  <td data-label="Orders" style={{...S.td,textAlign: isMobile ? 'right' : 'center'}}>{c.ordersPlaced||0}</td>
+                  <td data-label="Added" style={{...S.td,fontSize:11,color:'#888'}}>{new Date(c.createdAt).toLocaleDateString('en-IN')}</td>
+                  <td style={{...S.td, textAlign: isMobile ? 'right' : 'left'}}><button onClick={()=>deleteContact(c._id)} style={{background:'none',border:'none',cursor:'pointer',color:'#E57373',padding:4}}><Trash2 size={14}/></button></td>
                 </tr>
               ))}
             </tbody>

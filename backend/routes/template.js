@@ -104,6 +104,19 @@ router.post('/send', upload.single('image'), async (req, res) => {
   }
   if (!phoneList.length) return res.status(400).json({ success: false, message: 'No contacts to send to' });
 
+  // Deduplication check: prevent duplicate templates within 10 seconds
+  const tenSecondsAgo = new Date(Date.now() - 10000);
+  const duplicate = await Template.findOne({
+    message,
+    title: title || 'Fresh Stock Available!',
+    footer: footer || '',
+    createdAt: { $gte: tenSecondsAgo }
+  });
+  if (duplicate) {
+    console.log('⚠️ [WA] Duplicate template broadcast request detected. Ignoring.');
+    return res.json({ success: true, templateId: duplicate._id, total: phoneList.length, message: 'Template already sent (duplicate check).' });
+  }
+
   const imageUrl = req.file ? path.join(__dirname, '../uploads/campaigns/', req.file.filename) : null;
   const template = new Template({
     title: title || 'Fresh Stock Available!', message, footer: footer || '',

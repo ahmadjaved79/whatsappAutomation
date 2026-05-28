@@ -220,6 +220,9 @@ const handleInterestResponse = async (key, body, session) => {
   const no  = ['2', 'no', 'nahi', 'nope', 'not', 'nahin', 'n'].some(w => body === w || body.startsWith(w));
 
   if (yes) {
+    // ── Update session state immediately to prevent race conditions ──
+    await setSession(key, { state: STATES.AWAITING_ITEM_SELECTION, templateId: session.templateId });
+
     // ── INCREMENT interested count on the template ──────────────────────────
     if (session.templateId) {
       try {
@@ -231,8 +234,10 @@ const handleInterestResponse = async (key, body, session) => {
     await sendTextMessage(sp, '🎉 Great! Let me show you today\'s fresh menu...');
     await sleep(800);
     await sendMenuItems(sp);
-    await setSession(key, { state: STATES.AWAITING_ITEM_SELECTION, templateId: session.templateId });
   } else if (no) {
+    // ── Update session state immediately to prevent race conditions ──
+    await setSession(key, { state: STATES.IDLE });
+
     // ── INCREMENT notInterested count on the template ───────────────────────
     if (session.templateId) {
       try {
@@ -241,12 +246,12 @@ const handleInterestResponse = async (key, body, session) => {
       } catch (e) { console.warn('Failed to update template notInterested count:', e.message); }
     }
     await sendNotInterestedMessage(sp);
-    await setSession(key, { state: STATES.IDLE });
     await updateContact(key, 'not_interested');
   } else {
     await sendTextMessage(sp, `⚠️ Please reply:\n*1* ✅ Yes, Interested!\n*2* ❌ No, Not Interested`);
   }
 };
+
 
 // ── Send menu ─────────────────────────────────────────────────────────────────
 const sendMenuItems = async (sp) => {

@@ -84,8 +84,15 @@ export default function Orders() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [date, setDate] = useState('');
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => { loadOrders(); }, [filter, date]);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const loadOrders = async () => {
     setLoading(true);
@@ -105,7 +112,7 @@ export default function Orders() {
     { key:'all', label:'All', color:'#555' },
     { key:'confirmed', label:'Confirmed', color:'#1A7A4A' },
     { key:'preparing', label:'Preparing', color:'#E05C00' },
-    { key:'out_for_delivery', label:'Out for Delivery', color:'#1565C0' },
+    { key:'out_for_delivery', label:'Out of Delivery', color:'#1565C0' },
     { key:'delivered', label:'Delivered', color:'#558B2F' },
   ];
 
@@ -113,20 +120,20 @@ export default function Orders() {
     <div style={S.page} className="animate-in">
       <div style={S.card}>
         {/* Filters */}
-        <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:16}}>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+        <div style={{display:'flex',flexDirection: isMobile ? 'column' : 'row',alignItems: isMobile ? 'stretch' : 'center',gap:12,marginBottom:16}}>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent: isMobile ? 'center' : 'flex-start'}}>
             {tabs.map(t=>(
               <button key={t.key} onClick={()=>setFilter(t.key)} style={{...S.btn,background:filter===t.key?t.color:'#F5F5F5',color:filter===t.key?'#fff':'#555'}}>
                 {t.label} {t.key!=='all'&&<span style={{background:'rgba(255,255,255,.25)',borderRadius:10,padding:'1px 6px',fontSize:10}}>{orders.filter(o=>o.status===t.key).length}</span>}
               </button>
             ))}
           </div>
-          <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
-            <div style={{position:'relative'}}>
+          <div style={{marginLeft: isMobile ? '0' : 'auto',display:'flex',gap:8,alignItems:'center',flexWrap: isMobile ? 'wrap' : 'nowrap',width: isMobile ? '100%' : 'auto',justifyContent: isMobile ? 'space-between' : 'flex-end'}}>
+            <div style={{position:'relative',flex: isMobile ? 1 : 'none',minWidth: isMobile ? 'unset' : 200}}>
               <Search size={14} style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:'#aaa'}}/>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search order / phone…" style={{...S.input,paddingLeft:32,width:200}}/>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search order / phone…" style={{...S.input,paddingLeft:32,width:'100%',boxSizing:'border-box'}}/>
             </div>
-            <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={S.input}/>
+            <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{...S.input,flex: isMobile ? 1 : 'none'}}/>
             {date && <button onClick={()=>setDate('')} style={{...S.btn,background:'#F5F5F5',color:'#555'}}>Clear</button>}
             <button onClick={loadOrders} style={{...S.btn,background:'#F5F5F5',color:'#555'}}><RefreshCw size={13}/></button>
           </div>
@@ -141,7 +148,7 @@ export default function Orders() {
             <div style={{color:'#ccc',fontSize:13,marginTop:4}}>Send a campaign to start receiving orders</div>
           </div>
         ) : (
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(400px,1fr))',gap:14}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:14}}>
             {filtered.map(o=><OrderCard key={o._id} order={o} onUpdate={loadOrders}/>)}
           </div>
         )}

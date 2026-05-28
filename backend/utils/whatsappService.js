@@ -34,6 +34,10 @@ console.log = (...args) => {
 // Fixes "Waiting for this message" by returning the original on retry requests
 const msgCache = new Map();
 
+// Map to track processed message IDs to prevent double handling of incoming messages
+const processedMsgIds = new Map();
+
+
 // LID → phone JID map — WhatsApp multi-device uses @lid instead of phone numbers
 const lidToPhone   = new Map();
 // Queue for @lid messages that arrived before contacts synced
@@ -260,16 +264,51 @@ const initWhatsApp = async () => {
       }
     });
 
-    // ── Incoming messages ─────────────────────────────────────────────────────
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
       if (type !== 'notify') return;
       for (const msg of messages) {
         if (!msg.message) continue;
 
+        const msgId = msg.key.id;
+        const now = Date.now();
+
+        // 1. Synchronous In-memory check (performed IMMEDIATELY before any async/await statements to block race conditions)
+        if (msgId && !msg.key.fromMe) {
+          if (processedMsgIds.has(msgId) && (now - processedMsgIds.get(msgId)) < 15000) {
+            console.log(`ℹ️ Duplicate message ignored in memory (sync): ${msgId}`);
+            continue;
+          }
+          processedMsgIds.set(msgId, now);
+        }
+
         // Cache every message so getMessage can return it on retry
         await cacheMsg(msg.key.remoteJid, msg.key.id, msg.message);
 
         if (msg.key.fromMe) continue;
+
+        if (msgId) {
+          // 2. Database check (prevents duplicate processing across multiple running processes/servers)
+          try {
+            const ProcessedMessage = require('../models/ProcessedMessage');
+            await ProcessedMessage.create({ msgId });
+          } catch (err) {
+            if (err.code === 11000) {
+              console.log(`ℹ️ Duplicate message ignored in DB: ${msgId}`);
+              continue;
+            }
+            console.error('Failed to save ProcessedMessage to MongoDB:', err.message);
+          }
+
+          // Keep map bounded to prevent memory leaks (clear entries older than 30 seconds)
+          if (processedMsgIds.size > 1000) {
+            const expirationTime = now - 30000;
+            for (const [k, time] of processedMsgIds.entries()) {
+              if (time < expirationTime) {
+                processedMsgIds.delete(k);
+              }
+            }
+          }
+        }
 
         try {
           const { ConversationFlow } = require('./conversationFlow');
@@ -280,6 +319,8 @@ const initWhatsApp = async () => {
         }
       }
     });
+
+
 
     isInitializing = false;
     return sock;

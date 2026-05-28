@@ -22,8 +22,15 @@ export default function CustomerProfiles() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [msgText, setMsgText]     = useState('');
   const [msgStatus, setMsgStatus] = useState('');
+  const [isMobile, setIsMobile]   = useState(window.innerWidth < 768);
 
   useEffect(() => { fetchContacts(); }, [segFilter]);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const fetchContacts = async () => {
     const q = segFilter !== 'all' ? `?segment=${segFilter}` : '';
@@ -63,10 +70,10 @@ export default function CustomerProfiles() {
   );
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 80px)', fontFamily: 'inherit', gap: 0 }}>
+    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: isMobile ? 'auto' : 'calc(100vh - 80px)', fontFamily: 'inherit', gap: 0 }}>
 
       {/* Left list */}
-      <div style={{ width: 300, borderRight: '1px solid #F0F0F0', display: 'flex', flexDirection: 'column', flexShrink: 0, background: '#fff' }}>
+      <div style={{ width: isMobile ? '100%' : 300, borderRight: isMobile ? 'none' : '1px solid #F0F0F0', borderBottom: isMobile ? '1px solid #F0F0F0' : 'none', display: 'flex', flexDirection: 'column', flexShrink: 0, background: '#fff', height: isMobile ? '320px' : 'auto' }}>
         <div style={{ padding: '16px 14px 10px', borderBottom: '1px solid #F0F0F0' }}>
           <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 10, color: '#1a1a1a' }}>Customers</div>
           <div style={{ position: 'relative', marginBottom: 8 }}>
@@ -102,25 +109,25 @@ export default function CustomerProfiles() {
 
       {/* Right detail */}
       {selected ? (
-        <div style={{ flex: 1, overflowY: 'auto', padding: '22px 24px', background: '#FAFAFA' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '22px 24px', background: '#FAFAFA', height: 'auto' }}>
 
           {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'flex-start', marginBottom: 20, gap: 12 }}>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 18, fontWeight: 700, color: '#1a1a1a' }}>{selected.name || 'Unknown'}</span>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, ...(segBadge[selected.segment] || segBadge.new) }}>{selected.segment?.toUpperCase()}</span>
                 {selected.optedOut && <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: '#FFEBEE', color: '#C62828' }}>OPTED OUT</span>}
               </div>
               <div style={{ fontSize: 13, color: '#888' }}>+91 {selected.phone}{selected.email ? ` · ${selected.email}` : ''}</div>
             </div>
-            <button onClick={() => toggleOptOut(selected)} style={{ ...S.btn, background: selected.optedOut ? '#E8F5E9' : '#FFEBEE', color: selected.optedOut ? '#1A7A4A' : '#C62828', border: '1px solid currentColor' }}>
+            <button onClick={() => toggleOptOut(selected)} style={{ ...S.btn, background: selected.optedOut ? '#E8F5E9' : '#FFEBEE', color: selected.optedOut ? '#1A7A4A' : '#C62828', border: '1px solid currentColor', justifyContent: 'center' }}>
               {selected.optedOut ? <><UserCheck size={13} />Re-subscribe</> : <><UserX size={13} />Opt Out</>}
             </button>
           </div>
 
           {/* Stats */}
-          <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap', justifyContent: isMobile ? 'space-between' : 'flex-start' }}>
             {[
               { label: 'Total Orders',    value: selected.ordersPlaced || 0 },
               { label: 'Total Spend',     value: `₹${(selected.totalSpend || 0).toLocaleString('en-IN')}` },
@@ -129,7 +136,7 @@ export default function CustomerProfiles() {
               { label: 'Templates Sent',  value: selected.templatesSent || 0 },
               { label: 'Source',          value: selected.source || 'manual' },
             ].map((m, i) => (
-              <div key={i} style={{ background: '#fff', borderRadius: 10, padding: '12px 16px', minWidth: 110, border: '1px solid #F0F0F0' }}>
+              <div key={i} style={{ background: '#fff', borderRadius: 10, padding: '12px 16px', minWidth: isMobile ? 'calc(50% - 6px)' : 110, border: '1px solid #F0F0F0', boxSizing: 'border-box' }}>
                 <div style={{ fontSize: 11, color: '#888', fontWeight: 600, marginBottom: 4 }}>{m.label}</div>
                 <div style={{ fontSize: 16, fontWeight: 800, color: '#1a1a1a' }}>{m.value}</div>
               </div>
@@ -158,7 +165,7 @@ export default function CustomerProfiles() {
             ? <div style={{ background: '#fff', borderRadius: 10, padding: 24, textAlign: 'center', color: '#aaa', fontSize: 13, border: '1px solid #F0F0F0' }}>No orders yet</div>
             : orders.map(o => (
                 <div key={o._id} style={{ background: '#fff', border: '1px solid #F0F0F0', borderRadius: 12, padding: '14px 18px', marginBottom: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#C8102E', fontSize: 13 }}>{o.orderId}</span>
                       <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, ...(statBadge[o.status] || {}) }}>{o.status?.replace(/_/g,' ')}</span>
@@ -174,7 +181,7 @@ export default function CustomerProfiles() {
           }
         </div>
       ) : (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#aaa', fontSize: 14, background: '#FAFAFA' }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#aaa', fontSize: 14, background: '#FAFAFA', padding: 40 }}>
           <div style={{ textAlign: 'center' }}>
             <User size={48} color="#E0E0E0" style={{ marginBottom: 12 }} />
             <div>Select a customer to view their profile</div>
