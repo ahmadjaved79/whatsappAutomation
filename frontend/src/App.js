@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Layout from './components/Layout';
+import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Contacts from './pages/Contacts';
 import Template from './pages/Template';
@@ -13,18 +14,26 @@ import ScheduleBroadcast from './pages/ScheduleBroadcast';
 import ManualMessage from './pages/ManualMessage';
 import StockManager from './pages/StockManager';
 import './App.css';
-import './responsive.css';   // ← global responsive styles for all pages
+import './responsive.css';
+
+// Auth guard
+const RequireAuth = ({ children }) => {
+  const token = localStorage.getItem('admin_token');
+  if (!token) return <Navigate to="/login" replace />;
+  return children;
+};
 
 export default function App() {
   return (
     <BrowserRouter>
       <Toaster position="top-right" toastOptions={{
-        style: { fontFamily:'DM Sans, sans-serif', fontSize:'14px', borderRadius:'10px' },
+        style: { fontFamily:'inherit', fontSize:'14px', borderRadius:'10px' },
         success: { iconTheme:{ primary:'#1A7A4A', secondary:'#fff' } },
         error:   { iconTheme:{ primary:'#C8102E', secondary:'#fff' } },
       }} />
       <Routes>
-        <Route path="/" element={<Layout />}>
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<RequireAuth><Layout /></RequireAuth>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard"       element={<Dashboard />} />
           <Route path="contacts"        element={<Contacts />} />
@@ -37,6 +46,7 @@ export default function App() {
           <Route path="manual-message"  element={<ManualMessage />} />
           <Route path="stock"           element={<StockManager />} />
         </Route>
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );

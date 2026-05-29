@@ -353,6 +353,18 @@ const confirmOrder = async (key, sp, selectedItems, templateId) => {
     status: 'confirmed',
   });
   await order.save();
+
+  // Deduct stock on order placement (only if stock tracking is enabled, i.e. stockQty is not null)
+  const Menu = require('../models/Menu');
+  for (const item of orderItems) {
+    if (item.menuItem) {
+      await Menu.findOneAndUpdate(
+        { _id: item.menuItem, stockQty: { $ne: null } },
+        { $inc: { stockQty: -item.quantity } }
+      ).catch(err => console.error(`Failed to reduce stock on order placement:`, err.message));
+    }
+  }
+
   await setSession(key, { state: STATES.ORDER_CONFIRMED, selectedItems: [], currentItemIndex: 0 });
 
   // ── INCREMENT ordersGenerated on the template ─────────────────────────────

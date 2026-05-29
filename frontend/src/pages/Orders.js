@@ -40,17 +40,17 @@ function OrderCard({ order, onUpdate }) {
     setUpdating(false);
   };
 
-  const deleteOrder = async () => {
-    if (!window.confirm(`Delete order ${order.orderId}? This will cancel it, restore the stock, and send a cancellation message to the customer.`)) return;
+  const cancelOrder = async () => {
+    if (!window.confirm(`Cancel order ${order.orderId}? This will restore the product stock and send a cancellation message to the customer.`)) return;
     setUpdating(true);
     try {
-      const { data } = await api.delete(`/api/orders/${order.orderId}`);
+      const { data } = await api.put(`/api/orders/${order.orderId}/status`, { status: 'cancelled' });
       if (data.success) {
-        toast.success('Order deleted and cancelled successfully!');
+        toast.success('Order cancelled successfully!');
         onUpdate();
       }
     } catch {
-      toast.error('Failed to delete order');
+      toast.error('Failed to cancel order');
     }
     setUpdating(false);
   };
@@ -84,23 +84,24 @@ function OrderCard({ order, onUpdate }) {
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span style={{fontSize:11,color:'#aaa'}}>{new Date(order.createdAt).toLocaleString('en-IN')}</span>
           {order.status==='delivered' && <span style={{fontSize:12,color:'#1A7A4A',fontWeight:600}}>✅ Completed</span>}
+          {order.status==='cancelled' && <span style={{fontSize:12,color:'#C62828',fontWeight:600}}>❌ Cancelled</span>}
         </div>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
           <button 
-            onClick={deleteOrder} 
-            disabled={updating || order.status === 'delivered'} 
+            onClick={cancelOrder} 
+            disabled={updating || order.status === 'delivered' || order.status === 'cancelled'} 
             style={{
               ...S.btn,
-              background: (updating || order.status === 'delivered') ? '#f8fafc' : '#FFF0F2',
-              color: (updating || order.status === 'delivered') ? '#cbd5e1' : '#C8102E',
-              border: (updating || order.status === 'delivered') ? '1px solid #e2e8f0' : '1px solid #F5D0D7',
+              background: (updating || order.status === 'delivered' || order.status === 'cancelled') ? '#f8fafc' : '#FFF0F2',
+              color: (updating || order.status === 'delivered' || order.status === 'cancelled') ? '#cbd5e1' : '#C8102E',
+              border: (updating || order.status === 'delivered' || order.status === 'cancelled') ? '1px solid #e2e8f0' : '1px solid #F5D0D7',
               padding:'7px 11px',
               flex:1,
               justifyContent:'center',
-              cursor: (updating || order.status === 'delivered') ? 'not-allowed' : 'pointer'
+              cursor: (updating || order.status === 'delivered' || order.status === 'cancelled') ? 'not-allowed' : 'pointer'
             }}
           >
-            <Trash2 size={13}/> Cancel & Delete
+            <XCircle size={13}/> Cancel Order
           </button>
           {next && order.status!=='cancelled' && (
             <button onClick={advance} disabled={updating} style={{...S.btn,background:'linear-gradient(135deg,#C8102E,#9B0D22)',color:'#fff',opacity:updating?0.7:1,flex:1,justifyContent:'center'}}>
@@ -149,6 +150,7 @@ export default function Orders() {
     { key:'preparing', label:'Preparing', color:'#E05C00' },
     { key:'out_for_delivery', label:'Out of Delivery', color:'#1565C0' },
     { key:'delivered', label:'Delivered', color:'#558B2F' },
+    { key:'cancelled', label:'Cancelled', color:'#C62828' },
   ];
 
   return (

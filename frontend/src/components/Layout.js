@@ -3,7 +3,7 @@ import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Megaphone, ShoppingBag, UtensilsCrossed,
   Wifi, WifiOff, Loader2, Menu, X,
-  BarChart2, UserCircle, Clock, MessageCircle, Package
+  BarChart2, UserCircle, Clock, MessageCircle, Package, LogOut
 } from 'lucide-react';
 import api from '../api';
 import './Layout.css';
@@ -150,6 +150,13 @@ export default function Layout() {
             <span className="sidebar__status-dot" />
             <span>{meta.label}</span>
           </div>
+          <button className="sidebar__logout-btn" onClick={() => {
+            localStorage.removeItem('admin_token');
+            window.location.href = '/login';
+          }}>
+            <LogOut size={16} />
+            <span>Sign Out</span>
+          </button>
         </div>
       </aside>
 

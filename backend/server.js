@@ -15,6 +15,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ── Routes ────────────────────────────────────────────────────
+app.use('/api/auth',      require('./routes/auth'));
 app.use('/api/whatsapp',  require('./routes/whatsapp'));
 app.use('/api/contacts',  require('./routes/contacts'));
 app.use('/api/template',  require('./routes/template'));
